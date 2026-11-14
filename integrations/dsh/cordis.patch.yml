@@ -1,0 +1,19 @@
+# criteria-compiler MCP server
+#
+# 粘贴到 $DSH_HOME/cordis.patch.yml（用户级），不要改 profile 里的文件 —— 升级会覆盖。
+#
+# Windows 注意：DSH 直接 spawn，不经 shell，`npx` 会失败。二选一：
+#   a) command 写 `npx.cmd`
+#   b) command 写 node，args 指向构建产物（推荐，路径可控）
+- insert:
+    - id: criteria-compiler-mcp
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: criteria-compiler
+        transport: stdio
+        command: node
+        args:
+          - "C:\\path\\to\\criteria-compiler\\packages\\mcp\\dist\\server.js"
+        env:
+          # OpenAlex polite pool：填了邮箱限流更宽松，填不填都能用
+          OPENALEX_MAILTO: "you@example.com"

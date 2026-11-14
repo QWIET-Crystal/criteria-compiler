@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary
+
+# Keep the benchmark data diffable; it is reviewed in PRs.
+bench/*.csv text eol=lf

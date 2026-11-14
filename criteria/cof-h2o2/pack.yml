@@ -1,0 +1,82 @@
+# 示例判据包：COF 光催化 H2O2 耦合有机转化
+# 这是 v0.2 的目标格式，当前仅作样例，尚未被代码消费。
+name: cof-h2o2
+version: 1.0.0
+domain: 光催化 / COF 材料
+description: >
+  判断一篇文献是否属于"COF（及其姊妹体系）光催化产 H2O2 并耦合有机转化"。
+  本包不覆盖"综述写作"，只覆盖判定。
+
+criteria:
+  - id: C-SCOPE-01
+    version: 1
+    text: "材料可以是 COF，也可以是姊妹体系（CMP / PHI / 碳氮 / CdS / 铋系），后者标 material_scope=hybrid"
+    severity: hard
+    section: ["3.2"]
+    check:
+      kind: keyword_any
+      any: ["covalent organic framework", "COF", "CTF", "conjugated microporous", "heptazine imide", "carbon nitride", "CdS", "Bi2O2S", "CuInS2"]
+    examples:
+      positive: ["10.1002/adfm.202316773"]
+      negative: ["10.1016/j.apcatb.2026.127309"]
+    rationale: >
+      只写 COF 会把姊妹体系系统性漏掉；实测单材料口径只能覆盖金集 2/7。
+      但姊妹体系必须显式标注，否则会污染"COF 侧证据有多少"的结论。
+
+  - id: C-COUPLE-01
+    version: 1
+    text: "耦合不要求同一个体系：串联、分步、前后两个体系都算（D 型）"
+    severity: hard
+    section: ["3.2(1)", "3.2(3)"]
+    check:
+      kind: keyword_any
+      any: ["tandem", "sequential", "step-wise", "in a separate step", "two-step"]
+    examples:
+      positive: ["10.1038/s41467-025-62937-x"]
+      negative: ["10.1016/j.mser.2025.101117"]
+    rationale: "口径由导师确认；放宽后可用文献从个位数升到二十几条。串联若只有两步串接且无产物价值，则降为 1.3。"
+
+  - id: C-TRAP-01
+    version: 1
+    text: "摘要头条的最高产率若来自牺牲剂体系，不得当作耦合数据引用"
+    severity: hard
+    section: []
+    check:
+      kind: cooccurrence
+      near: ["sacrificial", "scavenger", "10% benzyl alcohol"]
+      value_pattern: "\\d+(\\.\\d+)?\\s*(μmol|mmol|mM)"
+    examples:
+      positive: ["10.1021/jacs.6c00731"]
+      negative: ["10.1002/adfm.202510257"]
+    rationale: >
+      sp²-COF-CN 的头条 17768.4 μmol g⁻¹ h⁻¹ 是苯甲醇牺牲剂组，耦合组只有 24 mM，
+      相差三个数量级。这类错误人不会犯，只读摘要的模型必犯。
+
+  - id: C-EVID-01
+    version: 1
+    text: "判定要看图：是否存在一张图同时给出两种产物随时间的变化"
+    severity: soft
+    section: []
+    manual: true
+    check: {}
+    examples:
+      positive: ["10.1002/adfm.202510257"]
+      negative: ["10.1016/j.mser.2025.101117"]
+    rationale: "最可靠的判据，但需要读图，机器做不到；只能输出提示让人去看。"
+
+precedents:
+  - case: P-0007
+    doi: 10.1021/jacs.6c00731
+    verdict: 2
+    criteria: [C-TRAP-01]
+    rationale: "头条数字来自牺牲剂组，耦合组为 24 mM；两套实验溶剂不同。"
+    decided_by: 领域研究者
+    decided_at: 2026-11-10
+
+  - case: P-0009
+    doi: 10.1016/j.mser.2025.101117
+    verdict: 0
+    criteria: [C-COUPLE-01]
+    rationale: "苄胺偶联以 'In addition, we systematically investigated' 另起实验，两种产物从未同图给出。"
+    decided_by: 领域研究者
+    decided_at: 2026-11-10

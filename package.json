@@ -1,0 +1,26 @@
+{
+  "name": "criteria-compiler",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Compile a lab's eligibility criteria into executable rules, then screen literature candidates with evidence hints instead of black-box verdicts.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "bench": "node bench/run.mjs",
+    "bench:json": "node bench/run.mjs --json",
+    "parity": "node bench/parity.mjs",
+    "build": "tsc -b packages/core packages/cli packages/mcp",
+    "test": "node bench/parity.mjs && vitest run",
+    "typecheck": "tsc -b packages/core && pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

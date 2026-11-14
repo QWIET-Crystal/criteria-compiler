@@ -1,0 +1,20 @@
+{
+  "name": "@criteria-compiler/core",
+  "version": "0.1.0",
+  "description": "Pure, testable core: normalization, family search, coverage evaluation. No LLM, no state.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}
