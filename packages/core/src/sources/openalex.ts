@@ -27,6 +27,7 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 async function request<T>(url: string, attempts = 4, timeoutMs = 20_000): Promise<T> {
   let lastErr: unknown;
+  let lastStatus = 0;
   for (let i = 0; i < attempts; i++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -36,20 +37,33 @@ async function request<T>(url: string, attempts = 4, timeoutMs = 20_000): Promis
         signal: controller.signal,
       });
       if (res.status === 200) return (await res.json()) as T;
+
+      lastStatus = res.status;
       if ([401, 429, 500, 502, 503].includes(res.status)) {
         await sleep(1200 * (i + 1));
         continue;
       }
-      throw new Error(`OpenAlex HTTP ${res.status}`);
+      const body = await res.text().catch(() => '');
+      throw new Error(`OpenAlex HTTP ${res.status}${body ? `: ${body.slice(0, 160)}` : ''}`);
     } catch (err) {
       lastErr = err;
+      // A non-retryable HTTP error already carries a useful message.
+      if (err instanceof Error && err.message.startsWith('OpenAlex HTTP')) throw err;
       if (i === attempts - 1) throw err;
       await sleep(1200 * (i + 1));
     } finally {
       clearTimeout(timer);
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error('OpenAlex request failed');
+  // Reaching here means every attempt was retryable and none succeeded.
+  const hint =
+    lastStatus === 429
+      ? ' (rate limited: set OPENALEX_API_KEY, or the shared anonymous daily budget is exhausted)'
+      : lastStatus === 401
+        ? ' (unauthorized: check OPENALEX_API_KEY, it must be activated by email)'
+        : '';
+  const base = lastErr instanceof Error ? lastErr.message : 'no response';
+  throw new Error(`OpenAlex request failed after ${attempts} attempts, last status ${lastStatus}${hint}; ${base}`);
 }
 
 function buildUrl(search: string, page: number, perPage: number, mailto?: string, apiKey?: string): string {

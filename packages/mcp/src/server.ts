@@ -50,6 +50,9 @@ function loadGold(): GoldRecord[] {
 const server = new McpServer({ name: 'criteria-compiler', version: '0.1.0' });
 
 const mailto = process.env.OPENALEX_MAILTO;
+// Without this the server silently falls back to the shared anonymous budget and
+// every search fails with an opaque 429.
+const apiKey = process.env.OPENALEX_API_KEY;
 
 server.tool(
   'search_candidates',
@@ -67,9 +70,10 @@ server.tool(
     const pool = new Map<string, OpenAlexWork>();
     // exactOptionalPropertyTypes: build the options object conditionally instead of
     // passing `{ cap: undefined }`, which is a type error under strict settings.
-    const opts: { cap?: number; mailto?: string } = {};
+    const opts: { cap?: number; mailto?: string; apiKey?: string } = {};
     if (typeof cap === 'number') opts.cap = cap;
     if (mailto) opts.mailto = mailto;
+    if (apiKey) opts.apiKey = apiKey;
     for (const name of names) await collect(familyQuery(name), pool, opts);
     for (const q of extraQueries ?? []) await collect(q, pool, opts);
     const sample = [...pool.values()].slice(0, 50);
@@ -129,9 +133,10 @@ server.tool(
     const target = STAGES.find((s) => s.name === (stage ?? 'six-families-with-fixes')) ?? STAGES[2]!;
     if (!target) return { content: [{ type: 'text', text: 'no stage' }], isError: true };
     const pool = new Map<string, OpenAlexWork>();
-    const opts: { cap?: number; mailto?: string } = {};
+    const opts: { cap?: number; mailto?: string; apiKey?: string } = {};
     if (typeof cap === 'number') opts.cap = cap;
     if (mailto) opts.mailto = mailto;
+    if (apiKey) opts.apiKey = apiKey;
     for (const name of target.families) await collect(familyQuery(name), pool, opts);
     if (target.fixes) {
       for (const query of Object.values(FIX_QUERIES)) await collect(query, pool, opts);

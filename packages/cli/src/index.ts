@@ -75,7 +75,9 @@ async function main(): Promise<number> {
     const limit = limitIndex >= 0 ? Number(argv[limitIndex + 1]) || 20 : 20;
     const mailtoIndex = argv.indexOf('--mailto');
     const mailto = mailtoIndex >= 0 ? argv[mailtoIndex + 1] : process.env.OPENALEX_MAILTO;
-    const works = await searchWorks(query, 1, Math.min(limit, 200), mailto);
+    const apiKeyIndex = argv.indexOf('--api-key');
+    const apiKey = apiKeyIndex >= 0 ? argv[apiKeyIndex + 1] : process.env.OPENALEX_API_KEY;
+    const works = await searchWorks(query, 1, Math.min(limit, 200), mailto, apiKey);
     if (json) console.log(JSON.stringify(works, null, 2));
     else for (const w of works) console.log(`${w.year ?? '----'}\t${w.doi || '(no doi)'}\t${w.title}`);
     return 0;
