@@ -33,12 +33,15 @@
 | `series` / `two-step` / `tandem` / `stepwise` / `sequential` | ❌ 最多算 1.3 / 4.3.4 |
 | `sacrificial agent` / `hole scavenger` / `TEOA` / `EtOH` / 异丙醇 / 苯甲醇 | ⚠️ 降级，可进 3.2(1)，不可进 3.2(3) |
 | `without sacrificial agent` / `pure water` / `from water and air` | ✅ 高价值，优先收 |
+| `as both solvent and reactant` / `serves as both solvent and reactant` | ⚠️ 底物兼溶剂：产率怎么归一必须核方法节，不能按常规底物浓度理解 |
 
 ## 四、引用红线
 
 1. 最高产率 ≠ 耦合数据：头条常来自牺牲剂体系。
 2. 同一篇可能并存两种范式：归档时一篇拆两条记录。
-3. 单位不可比：`μmol g⁻¹ h⁻¹` 与 `mM h⁻¹` 不能直接换算比较。
+3. 单位不可比：`μmol g⁻¹ h⁻¹` 与 `mM h⁻¹` 不能直接换算比较。照抄原文单位，不做换算；
+   遇到 `μM g⁻¹`、`mM g⁻¹` 这类量纲可疑的写法，先回正文确认它是速率还是浓度，再决定能不能比。
+   实例：`187 000 μM g⁻¹` 与 `575 mM g⁻¹` 并列出现时，先判同不同量纲，再判同不同批次。
 4. 机翻摘要不可引：中文摘要存在漏译，引述回原文英文摘要。
 5. 被引数各家不同：正文要么不写，要么统一口径。
 
@@ -48,3 +51,16 @@
 - `anie.` 与 `ange.` 互转去重。
 - 摘要缺失的记录检索接口不返回，需按 DOI 直查。
 - 单材料口径会系统性漏掉姊妹体系：CMP / PHI / 碳氮 / CdS / 铋系。
+
+## 六、material_scope 判定（必须唯一，否则覆盖率算不清）
+
+| 取值 | 含义 | 例子 |
+|---|---|---|
+| COF | 骨架明确是共价有机框架；**CTF（共价三嗪框架）按检索口径算在 COF 内**，但要在 note 里写 “CTF” | BT-COF、sp²-COF-CN、CTF-SO |
+| 姊妹体系 | 非 COF 的多孔/聚合物光催化体系 | CMP、PHI、碳氮、CdS、COP |
+| composite | COF 与其他材料复合，核心贡献在界面而非骨架 | TiO₂/BTTA-COF、B-TiO₂@TpPa-Cl |
+
+**铁律：同一篇在两轮回答里必须给出同一个 material_scope。** 若第一轮写“姊妹体系”、第二轮写“纯 COF”，
+说明判定没落到规则上——回查本节，不要靠印象。
+
+**覆盖率只算 COF**：姊妹体系与 composite 参与论述，但不计入“COF 侧覆盖了多少篇”。
