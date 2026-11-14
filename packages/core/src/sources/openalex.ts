@@ -107,7 +107,7 @@ export async function collect(
   pool: Map<string, OpenAlexWork>,
   opts: SearchOptions = {},
 ): Promise<{ total: number; added: number }> {
-  const { cap = 500, mailto, apiKey, onPage } = opts;
+  const { cap = 1000, mailto, apiKey, onPage } = opts;
   const total = await countWorks(search, mailto, apiKey);
   // 10 pages x 100 records = 1000 records per query; keeps budget predictable.
   const pages = Math.max(1, Math.min(10, Math.ceil(Math.min(total, cap) / 100)));
