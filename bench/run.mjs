@@ -28,6 +28,7 @@ const ONLY_STAGE = argValue('--stage', '').toUpperCase();
 const TIMEOUT_MS = clamp(Number(argValue('--timeout', '15000')) || 15000, 3000, 60000);
 const VERBOSE = !argv.includes('--quiet');
 const NO_CACHE = argv.includes('--no-cache');
+const DUMP = argValue('--dump', '');
 
 const cacheFile = (url) => path.join(CACHE_DIR, `${crypto.createHash('sha1').update(url).digest('hex')}.json`);
 const cacheRead = (url) => {
@@ -313,6 +314,7 @@ async function main() {
   const stages = ONLY_STAGE ? STAGES.filter((s) => s.id === ONLY_STAGE) : STAGES;
   if (!stages.length) throw new Error(`unknown --stage ${ONLY_STAGE}; use A, B or C`);
   const results = [];
+  let lastPool = null;
 
   for (const stage of stages) {
     if (VERBOSE) process.stderr.write(`\n[${stage.id}] ${stage.label} — ${stage.queries.length} queries\n`);
@@ -334,6 +336,20 @@ async function main() {
     }
     const scored = gold ? evaluate(pool, gold) : { poolSize: pool.size };
     results.push({ stage: stage.id, label: stage.label, queries: stage.queries.length, perQuery, ...scored });
+    lastPool = pool;
+  }
+
+  if (DUMP && lastPool) {
+    const esc = (v) => {
+      const s = String(v ?? '');
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = [...lastPool.values()].sort((a, b) => (b.cited ?? 0) - (a.cited ?? 0));
+    const csv = ['doi,year,cited,title']
+      .concat(rows.map((w) => [w.doi, w.year ?? '', w.cited ?? 0, w.title].map(esc).join(',')))
+      .join('\r\n');
+    fs.writeFileSync(DUMP, `\uFEFF${csv}\r\n`, 'utf8');
+    process.stderr.write(`\ndumped ${rows.length} candidates -> ${DUMP}\n`);
   }
 
   if (asJson) {

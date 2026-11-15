@@ -25,14 +25,15 @@
       "role": "method",
       "terms": [
         "computer vision",
-        "pattern recognition",
-        "image analysis",
+        "convolutional neural network",
+        "vision transformer",
         "optical character recognition",
-        "document understanding",
-        "vision-language",
-        "remote sensing"
+        "document image analysis",
+        "image segmentation",
+        "remote sensing image",
+        "vision-language model"
       ],
-      "note": "The method side. Kept as phrases: 'image' alone would pull in any paper that mentions an image once."
+      "note": "Deliberately visual-only. First draft used 'pattern recognition' and 'remote sensing', which matched any ML paper and any report mentioning satellites; the pool was mostly non-vision work."
     }
   ],
 
