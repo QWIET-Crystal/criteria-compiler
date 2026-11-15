@@ -117,13 +117,16 @@ for (const dir of listPacks(process.argv.slice(2))) {
     if (!check.id) fail(name, 'check without id');
     else if (checkIds.has(check.id)) fail(name, `duplicate check id "${check.id}"`);
     else checkIds.add(check.id);
-    if (!check.pattern) {
-      fail(name, `check ${check.id} has no pattern`);
+    if (!check.pattern && !check.absent) {
+      fail(name, `check ${check.id} has neither pattern nor absent`);
     } else {
-      try {
-        new RegExp(check.pattern, 'i');
-      } catch (err) {
-        fail(name, `check ${check.id} has an invalid regex: ${err.message}`);
+      for (const [kind, source] of [['pattern', check.pattern], ['absent', check.absent]]) {
+        if (!source) continue;
+        try {
+          new RegExp(source, 'i');
+        } catch (err) {
+          fail(name, `check ${check.id} has an invalid ${kind} regex: ${err.message}`);
+        }
       }
     }
   }

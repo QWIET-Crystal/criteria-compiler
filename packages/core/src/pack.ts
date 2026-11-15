@@ -26,10 +26,17 @@ export interface ExtraQuery {
   why?: string;
 }
 
-/** A text pattern to flag on a single paper. Belongs to the domain, not the engine. */
+/** A text test to flag on a single paper. Belongs to the domain, not the engine. */
 export interface Check {
   id: string;
-  pattern: string;
+  /** Flagged when this pattern matches the text. */
+  pattern?: string;
+  /**
+   * Flagged when this pattern does NOT match the text — an absence signal.
+   * Needed for criteria like "the abstract never says the two things happen
+   * at the same time", which no positive pattern can express.
+   */
+  absent?: string;
   note?: string;
 }
 

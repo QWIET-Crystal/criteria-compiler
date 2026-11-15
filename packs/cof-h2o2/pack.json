@@ -74,6 +74,16 @@
       "id": "separate-experiment",
       "pattern": "in addition|furthermore|we also investigated",
       "note": "often starts a second experiment; check whether both products ever appear in one figure"
+    },
+    {
+      "id": "coupling-language-absent",
+      "absent": "simultaneous(ly)?|coupl(ed|ing)|co-?produc|tandem|paired|concurrent(ly)?|one-?pot|co-?generat|concomitant",
+      "note": "no 'happens at the same time' language anywhere in the abstract. Measured on this gold set: coupled appears 3x, concurrent 2x, simultaneous only 1x — matching the single word 'simultaneous' would flag 5 of the 7 positives"
+    },
+    {
+      "id": "stepwise-consumption",
+      "pattern": "(?=[\\s\\S]{0,400}(?:H\\s?2\\s?O\\s?2|hydrogen peroxide))(?=[\\s\\S]{0,400}(?:used to|converted|consumed|synthesi[sz]))(?:first step|step 1\\b|two[-\\s]step|second step|subsequent step)",
+      "note": "names a step sequence and then consumes H2O2 downstream; may be a cascade rather than a coupled system. Deliberately narrow: it only catches abstracts that say 'step' — a cascade that never says so is indistinguishable from coupling here"
     }
   ],
 

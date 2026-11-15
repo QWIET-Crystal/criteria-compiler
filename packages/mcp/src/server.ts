@@ -129,7 +129,8 @@ server.tool(
       let matched = false;
       if (text) {
         try {
-          matched = new RegExp(check.pattern, 'i').test(text);
+          if (check.absent) matched = !new RegExp(check.absent, 'i').test(text);
+          else if (check.pattern) matched = new RegExp(check.pattern, 'i').test(text);
         } catch {
           matched = false;
         }
