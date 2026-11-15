@@ -114,6 +114,7 @@ const STAGES = PACK.stages.map((stage) => {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let RATE_LIMITED = 0;
+let CROSSREF_FILTERED = 0;
 
 function normalizeDoi(raw) {
   return String(raw || '')
@@ -272,6 +273,20 @@ const toFreeText = (q) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+// Free-text sources ignore AND semantics: a relevance engine treats the finance
+// half as a bonus, not a requirement, so pure CV papers rank in. We therefore
+// re-check every record against the slots locally before it enters the pool.
+const squash = (s) =>
+  String(s ?? '')
+    .toLowerCase()
+    .replace(/[₀-₉]/g, (c) => String(c.charCodeAt(0) - 0x2080))
+    .replace(/\s+/g, '');
+
+function matchesSlots(text) {
+  const t = squash(text);
+  return SLOTS.every((slot) => slot.terms.some((term) => t.includes(squash(term))));
+}
+
 async function crossrefQuery(search, pool) {
   const text = toFreeText(search);
   let total = 0;
@@ -287,7 +302,7 @@ async function crossrefQuery(search, pool) {
   for (let page = 0; page < pages; page++) {
     const url =
       `${CROSSREF}?rows=100&offset=${page * 100}` +
-      `&select=DOI,title,issued,is-referenced-by-count` +
+      `&select=DOI,title,abstract,issued,is-referenced-by-count` +
       `&query.bibliographic=${encodeURIComponent(text)}` +
       (MAILTO ? `&mailto=${encodeURIComponent(MAILTO)}` : '');
     let data;
@@ -301,6 +316,11 @@ async function crossrefQuery(search, pool) {
       const title = Array.isArray(item.title) ? item.title[0] : item.title;
       if (!doi) continue;
       if (pool.has(doi)) continue;
+      const abstract = String(item.abstract ?? '').replace(/<[^>]+>/g, ' ');
+      if (!matchesSlots(`${title ?? ''} ${abstract}`)) {
+        CROSSREF_FILTERED++;
+        continue;
+      }
       pool.set(doi, {
         doi,
         title: String(title ?? '').replace(/\s+/g, ' ').trim(),
@@ -469,6 +489,9 @@ async function main() {
     }
   }
   console.log(`\nelapsed: ${((Date.now() - startedAt) / 1000).toFixed(1)}s  (cap ${CAP}/query, timeout ${TIMEOUT_MS}ms)`);
+  if (CROSSREF_FILTERED) {
+    console.log(`crossref: ${CROSSREF_FILTERED} record(s) dropped — they did not satisfy every slot`);
+  }
   console.log('\nnote: negatives are records that look related but do not satisfy the criteria.');
   console.log('      a negative appearing in the pool is not an error by itself;');
   console.log('      it is there to test the downstream judge.\n');
