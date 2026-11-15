@@ -31,7 +31,36 @@ node bench/run.mjs --no-cache            # 忽略 .cache/openalex
 
 不需要 `pnpm install`。
 
-## cap 是什么意思（重要）
+## 多源（--sources）
+
+```bash
+node bench/run.mjs --sources openalex            # 默认
+node bench/run.mjs --sources openalex,crossref
+```
+
+| 源 | 接口 | 是否需要 key | 查询语义 |
+|---|---|---|---|
+| openalex | `api.openalex.org` | 否（免费 key 额度 ×10） | 布尔表达式，支持槽位 |
+| crossref | `api.crossref.org` | 否 | 自由文本相关性排序，**不支持布尔** |
+
+Crossref 适配器会先剥掉 `AND/OR/NOT` 与括号，把词交给它的 bibliographic 检索。
+所以两个源吃的不是同一种查询，**结果不能逐条对比，只能比池子与覆盖率**。
+
+### 实测：多源没有提升覆盖率
+
+COF 包、A 段、cap 1000：
+
+| 源 | 池子 | 金集覆盖 |
+|---|---|---|
+| openalex | 925 | 2/7 |
+| openalex + crossref | 1327（+43%） | **2/7** |
+
+结论：**加源不等于加召回。** 覆盖率被“检索维度”卡住（这正是本项目的第一条结论），
+换更多源只是把池子撑大。Crossref 的正确用法是**补元数据**——找缺失的 DOI、年份、
+出版商记录，而不是指望它把维度外的文献捞回来。
+
+> Google Scholar 没有公开 API，抓取违反其条款且会触发验证码，本项目不做。
+> Semantic Scholar 有 API，但无 key 时极易 429（实测直接返回 429），如需接入要单独申请 key。
 
 `--cap` = **每个查询最多取多少条**，默认 1000，实现上限是 10 页 × 100 条。
 

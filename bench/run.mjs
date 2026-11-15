@@ -63,6 +63,17 @@ function loadPack(dir) {
 }
 
 const PACK = loadPack(PACK_DIR);
+
+// Sources are adapters, not a single fixed backend. Boolean sources take the slot
+// expression as-is; free-text sources take the terms without the operators.
+const KNOWN_SOURCES = ['openalex', 'crossref'];
+const SOURCES = (argValue('--sources', (PACK.sources ?? ['openalex']).join(',')) || 'openalex')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+for (const s of SOURCES) {
+  if (!KNOWN_SOURCES.includes(s)) throw new Error(`unknown source "${s}"; known: ${KNOWN_SOURCES.join(', ')}`);
+}
 const quote = (t) => `"${t}"`;
 const OR = (terms) => `(${terms.map(quote).join(' OR ')})`;
 
@@ -250,8 +261,80 @@ async function runQuery(search, pool) {
   return { total, added };
 }
 
-async function probeDoi(doi, pool) {
-  const key = canonicalDoi(normalizeDoi(doi));
+// ── Crossref adapter ─────────────────────────────────────────────────────────
+// Crossref has no boolean slot syntax: it ranks by bibliographic relevance. We
+// therefore strip the operators and hand it the terms as a plain phrase bag.
+const CROSSREF = 'https://api.crossref.org/works';
+const toFreeText = (q) =>
+  q
+    .replace(/\bAND\b|\bOR\b|\bNOT\b/g, ' ')
+    .replace(/[()"]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+async function crossrefQuery(search, pool) {
+  const text = toFreeText(search);
+  let total = 0;
+  let added = 0;
+  try {
+    const metaUrl = `${CROSSREF}?rows=1&select=DOI&query.bibliographic=${encodeURIComponent(text)}${MAILTO ? `&mailto=${encodeURIComponent(MAILTO)}` : ''}`;
+    const meta = await api(metaUrl);
+    total = meta.message?.['total-results'] ?? 0;
+  } catch (err) {
+    return { total: 0, added: 0, error: err.message };
+  }
+  const pages = clamp(Math.ceil(Math.min(total, CAP) / 100), 1, 5);
+  for (let page = 0; page < pages; page++) {
+    const url =
+      `${CROSSREF}?rows=100&offset=${page * 100}` +
+      `&select=DOI,title,issued,is-referenced-by-count` +
+      `&query.bibliographic=${encodeURIComponent(text)}` +
+      (MAILTO ? `&mailto=${encodeURIComponent(MAILTO)}` : '');
+    let data;
+    try {
+      data = await api(url);
+    } catch (err) {
+      return { total, added, error: err.message };
+    }
+    for (const item of data.message?.items ?? []) {
+      const doi = canonicalDoi(normalizeDoi(item.DOI || ''));
+      const title = Array.isArray(item.title) ? item.title[0] : item.title;
+      if (!doi) continue;
+      if (pool.has(doi)) continue;
+      pool.set(doi, {
+        doi,
+        title: String(title ?? '').replace(/\s+/g, ' ').trim(),
+        year: item.issued?.['date-parts']?.[0]?.[0] ?? null,
+        cited: item['is-referenced-by-count'] ?? 0,
+      });
+      added++;
+    }
+    await sleep(250);
+  }
+  return { total, added };
+}
+
+async function runQueryAll(search, pool) {
+  let total = 0;
+  let added = 0;
+  const errors = [];
+  for (const source of SOURCES) {
+    if (source === 'openalex') {
+      const r = await runQuery(search, pool);
+      total += r.total;
+      added += r.added;
+      if (r.error) errors.push(`openalex: ${r.error}`);
+    } else if (source === 'crossref') {
+      const r = await crossrefQuery(search, pool);
+      total += r.total;
+      added += r.added;
+      if (r.error) errors.push(`crossref: ${r.error}`);
+    }
+  }
+  return { total, added, error: errors.length ? errors.join('; ') : undefined };
+}
+
+async function probeDoi(doi, pool) {  const key = canonicalDoi(normalizeDoi(doi));
   if (!key || pool.has(key)) return false;
   try {
     const w = await api(`https://api.openalex.org/works/https://doi.org/${key}`);
@@ -324,7 +407,7 @@ async function main() {
     for (const q of stage.queries) {
       index++;
       if (VERBOSE) process.stderr.write(`   (${index}/${stage.queries.length}) ${q.slice(0, 60)}${q.length > 60 ? '…' : ''} `);
-      const r = await runQuery(q, pool);
+      const r = await runQueryAll(q, pool);
       perQuery.push({ query: q, ...r });
       if (VERBOSE) process.stderr.write(`total=${r.total} +${r.added} pool=${pool.size}${r.error ? ` ERR ${r.error}` : ''}\n`);
       if (r.error) process.stderr.write(`  ! query failed: ${r.error}\n`);
@@ -364,7 +447,7 @@ async function main() {
   } else {
     console.log(`gold: ${gold.length} records (${results[0].posTotal} positive / ${results[0].negTotal} negative)`);
   }
-  console.log(`cap per query: ${CAP}\n`);
+  console.log(`cap per query: ${CAP}   sources: ${SOURCES.join(' + ')}\n`);
   if (retrievalOnly) {
     console.log(`${pad('stage', 34)}${pad('pool', 10)}${pad('queries', 10)}`);
     console.log('-'.repeat(56));
