@@ -79,6 +79,9 @@ node bench/run.mjs --pack packs/your-field
 
 **不要为了跑绿基准去编标签。** 没有金集的 pack 允许存在，`validate-pack` 会标成 retrieval-only。
 
+默认用哪个 pack 由 `packs/default.json` 决定——代码里不写死包名，`validate-pack` 会扫 `packages/*/src`
+里是否出现了任何 pack 的词汇，出现就判失败。
+
 ## 快速开始
 
 ```bash

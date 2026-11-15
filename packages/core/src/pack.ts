@@ -133,17 +133,15 @@ export function loadPackFromDir(dir: string): Pack {
 }
 
 /**
- * Where the default pack lives, in order of preference:
- *   1. CRITERIA_PACK_DIR
- *   2. <cwd>/packs/<name>
- *   3. walking up from this module (so a spawned MCP server still finds the repo)
+ * Where the default pack lives. The engine never names a pack: the choice lives
+ * in data (`$CRITERIA_PACK_DIR`, `packs/default.json`, or a single pack dir).
  */
-function packsDirNearModule(): string | null {
+function packsRootNearModule(): string | null {
   try {
     let dir = path.dirname(fileURLToPath(import.meta.url));
     for (let i = 0; i < 6; i++) {
       const candidate = path.join(dir, 'packs');
-      if (fs.existsSync(path.join(candidate, 'cof-h2o2', 'pack.json'))) return candidate;
+      if (fs.existsSync(candidate)) return candidate;
       const parent = path.dirname(dir);
       if (parent === dir) break;
       dir = parent;
@@ -156,10 +154,24 @@ function packsDirNearModule(): string | null {
 
 export function defaultPackDir(): string {
   if (process.env.CRITERIA_PACK_DIR) return process.env.CRITERIA_PACK_DIR;
-  const fromCwd = path.resolve(process.cwd(), 'packs', 'cof-h2o2');
-  if (fs.existsSync(path.join(fromCwd, 'pack.json'))) return fromCwd;
-  const near = packsDirNearModule();
-  return near ? path.join(near, 'cof-h2o2') : fromCwd;
+
+  const roots = [path.resolve(process.cwd(), 'packs'), packsRootNearModule()].filter(Boolean) as string[];
+  for (const root of roots) {
+    const pointer = path.join(root, 'default.json');
+    if (fs.existsSync(pointer)) {
+      const { pack } = JSON.parse(fs.readFileSync(pointer, 'utf8')) as { pack?: string };
+      if (pack) return path.join(root, pack);
+    }
+  }
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    const dirs = fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith('_'))
+      .map((d) => d.name);
+    if (dirs.length === 1) return path.join(root, dirs[0]!);
+  }
+  throw new Error('no pack found: set CRITERIA_PACK_DIR, add packs/default.json, or pass --pack');
 }
 
 export function goldPathOf(pack: Pack, dir: string): string | null {

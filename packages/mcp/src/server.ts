@@ -58,7 +58,7 @@ function options(cap: number | undefined): { cap?: number; mailto?: string; apiK
 server.tool(
   'search_candidates',
   {
-    pack: z.string().optional().describe('Pack directory. Omit to use $CRITERIA_PACK_DIR or packs/cof-h2o2.'),
+    pack: z.string().optional().describe('Pack directory. Omit to use $CRITERIA_PACK_DIR, else packs/default.json.'),
     dimensions: z.array(z.string()).optional().describe('Dimension ids to query. Omit for all axes of the pack.'),
     extraQueries: z.array(z.string()).optional().describe('ExtraQuery ids to add. Omit for none.'),
     cap: z.number().int().min(100).max(2000).optional(),

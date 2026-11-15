@@ -51,6 +51,8 @@ function parseGold(file) {
   };
 }
 
+const validated = [];
+
 for (const dir of listPacks(process.argv.slice(2))) {
   const name = path.basename(dir);
   const file = path.join(dir, 'pack.json');
@@ -144,8 +146,9 @@ for (const dir of listPacks(process.argv.slice(2))) {
     }
   }
 
-  if (pack.gold) {
-    const goldFile = path.join(dir, pack.gold);
+  validated.push(pack);
+
+  if (pack.gold) {    const goldFile = path.join(dir, pack.gold);
     if (!fs.existsSync(goldFile)) {
       fail(name, `gold file "${pack.gold}" not found`);
     } else {
@@ -162,6 +165,53 @@ for (const dir of listPacks(process.argv.slice(2))) {
   } else {
     console.log(`  ${name}: retrieval-only (no gold set)`);
   }
+}
+
+// Rule: the engine must not know a pack's vocabulary.
+// Collect every declared term and fail if one appears under packages/*/src.
+const terms = new Map();
+for (const pack of validated) {
+  const slots = pack.slots ?? (pack.object ? [pack.object] : []);
+  const all = [
+    ...slots.flatMap((s) => s.terms ?? []),
+    ...(pack.dimensions ?? []).flatMap((d) => d.terms ?? []),
+  ];
+  for (const t of all) {
+    const key = String(t).toLowerCase();
+    // Short acronyms produce false positives inside ordinary words.
+    if (key.length >= 4) terms.set(key, pack.id);
+  }
+}
+
+try {
+  const root = path.join(ROOT, 'packages');
+  const files = fs
+    .readdirSync(root, { recursive: true })
+    .filter(
+      (f) =>
+        typeof f === 'string' &&
+        f.endsWith('.ts') &&
+        f.split(path.sep).includes('src') &&
+        !f.split(path.sep).includes('node_modules'),
+    );
+  let leaks = 0;
+  for (const rel of files) {
+    const lines = fs.readFileSync(path.join(root, rel), 'utf8').split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].toLowerCase();
+      for (const [term, packId] of terms) {
+        if (line.includes(term)) {
+          fail('engine', `packages/${rel.split(path.sep).join('/')}:${i + 1} contains "${term}" from pack ${packId}`);
+          if (++leaks >= 10) break;
+        }
+      }
+      if (leaks >= 10) break;
+    }
+    if (leaks >= 10) break;
+  }
+  if (!leaks) console.log(`  engine: no pack term appears under packages/*/src (${terms.size} terms checked)`);
+} catch (err) {
+  warn('engine', `could not scan packages/ for pack terms: ${err.message}`);
 }
 
 for (const w of warnings) console.warn(`warn  ${w}`);

@@ -1,0 +1,4 @@
+{
+  "pack": "cof-h2o2",
+  "_comment": "Which pack is used when no --pack / CRITERIA_PACK_DIR is given. This file is data on purpose: the engine must not name a pack in code. Change this line to switch the default domain."
+}

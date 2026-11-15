@@ -17,7 +17,7 @@ Commands
   help                      this message
 
 Global
-  --pack <dir>              pack directory (default: $CRITERIA_PACK_DIR or packs/cof-h2o2)
+  --pack <dir>              pack directory (default: $CRITERIA_PACK_DIR, else packs/default.json)
   --json                    machine-readable output
   --api-key <key>           OpenAlex key (default: $OPENALEX_API_KEY)
   --mailto <email>          OpenAlex contact (default: $OPENALEX_MAILTO)
