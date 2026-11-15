@@ -11,9 +11,10 @@ const SUBSCRIPT: Record<string, string> = {
 /**
  * Build the string used for *matching* only. Never display this to a user.
  *
- * The API renders chemical subscripts as spaces ("H 2 O 2"), so any literal
- * match on "H2O2" silently drops true positives. Instead of trying to repair
- * the text (which corrupts normal prose), we squash whitespace and compare.
+ * The API renders subscripts as spaces (a token shown as "X 2 Y 3" arrives with
+ * gaps), so any literal match on "X2Y3" silently drops true positives. Instead
+ * of trying to repair the text (which corrupts normal prose), we squash
+ * whitespace and compare.
  */
 export function normalizeForMatch(input: string): string {
   return String(input ?? '')

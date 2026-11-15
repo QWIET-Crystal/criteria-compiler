@@ -1,24 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalDoi, dedupeKey, hasFormula, normalizeDoi, normalizeForMatch } from '../src/normalize.js';
 
+// Fixtures are deliberately domain-neutral: the engine must not know any field's
+// vocabulary, and a test that imports that vocabulary hides the difference.
 describe('normalizeForMatch / hasFormula', () => {
   it('matches a formula that the API rendered with spaces', () => {
-    const abstract = 'photocatalytic hydrogen peroxide (H 2 O 2) synthesis is controlled by O 2 adsorption';
-    expect(hasFormula(abstract, 'H2O2')).toBe(true);
+    const text = 'the sample (A 1 B 2) was measured against a reference';
+    expect(hasFormula(text, 'A1B2')).toBe(true);
   });
 
-  it('matches space-rendered material formulas', () => {
-    const abstract = 'OV-Bi 2 O 2 S/CuInS 2 (OV-BOS/CIS) photocatalyst';
-    expect(hasFormula(abstract, 'Bi2O2S')).toBe(true);
-    expect(hasFormula(abstract, 'CuInS2')).toBe(true);
+  it('matches space-rendered multi-part formulas', () => {
+    const text = 'we used (D 4 E 5)/poly(F 6) as the control';
+    expect(hasFormula(text, 'D4E5')).toBe(true);
+    expect(hasFormula(text, 'poly(F6)')).toBe(true);
   });
 
   it('handles unicode subscripts', () => {
-    expect(normalizeForMatch('H₂O₂')).toBe('h2o2');
+    expect(normalizeForMatch('X₂Y₃')).toBe('x2y3');
   });
 
   it('does not invent matches', () => {
-    expect(hasFormula('carbon nitride photocatalyst', 'COF')).toBe(false);
+    expect(hasFormula('plain text without the token', 'A1B2')).toBe(false);
   });
 });
 
@@ -28,9 +30,9 @@ describe('normalizeDoi / canonicalDoi', () => {
     expect(normalizeDoi('doi: 10.1000/abc')).toBe('10.1000/abc');
   });
 
-  it('collapses Angewandte German and International DOIs', () => {
-    const intl = '10.1002/anie.202318562';
-    const ger = '10.1002/ange.202318562';
+  it('collapses the two editions that share one article', () => {
+    const intl = '10.1002/anie.202300001';
+    const ger = '10.1002/ange.202300001';
     expect(canonicalDoi(intl)).toBe(canonicalDoi(ger));
   });
 });

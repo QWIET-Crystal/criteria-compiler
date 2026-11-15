@@ -26,7 +26,7 @@ Examples
   criteria-compiler pack
   criteria-compiler bench --stage A
   criteria-compiler bench --pack packs/cv-finance-esg --stage B
-  criteria-compiler search '("covalent organic framework") AND ("hydrogen peroxide")'
+  criteria-compiler search '("some phrase") AND ("another phrase")'
 `);
 }
 

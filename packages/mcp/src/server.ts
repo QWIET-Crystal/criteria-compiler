@@ -111,16 +111,32 @@ server.tool(
   'check_paper',
   {
     doi: z.string().describe('DOI of the paper'),
-    text: z.string().optional().describe('Optional title+abstract, if you already have it'),
+    text: z.string().optional().describe('Optional title+abstract; slot terms and pack checks are matched against it'),
+    pack: z.string().optional().describe('Pack directory. Omit to use the default pack.'),
   },
-  async ({ doi, text }) => {
+  async ({ doi, text, pack: packDir }) => {
+    const dir = packDir ?? defaultPackDir();
+    const pack = loadPackFromDir(dir);
     const key = canonicalDoi(normalizeDoi(doi));
-    const flags: string[] = [];
-    if (text) {
-      if (hasFormula(text, 'H2O2')) flags.push('mentions H2O2');
-      if (/\bin addition\b|\bfurthermore\b/i.test(text)) flags.push('contains "In addition"/"Furthermore" — check whether it starts a separate experiment');
-      if (/\bsacrificial agent\b|\bhole scavenger\b|\bsolvent and reactant\b/i.test(text)) flags.push('mentions a sacrificial agent or a substrate that doubles as solvent');
-    }
+
+    const slots = slotsOf(pack).map((slot) => ({
+      slot: slot.id,
+      matched: text ? slot.terms.filter((t) => hasFormula(text, t)) : [],
+      total: slot.terms.length,
+    }));
+
+    const flags: { id: string; note: string | null; matched: boolean }[] = (pack.checks ?? []).map((check) => {
+      let matched = false;
+      if (text) {
+        try {
+          matched = new RegExp(check.pattern, 'i').test(text);
+        } catch {
+          matched = false;
+        }
+      }
+      return { id: check.id, note: check.note ?? null, matched };
+    });
+
     return {
       content: [
         {
@@ -128,7 +144,9 @@ server.tool(
           text: JSON.stringify(
             {
               doi: key,
-              flags,
+              pack: pack.id,
+              slots,
+              checks: flags,
               reminder: 'No verdict is returned. Read the figure and the solvent before deciding.',
             },
             null,

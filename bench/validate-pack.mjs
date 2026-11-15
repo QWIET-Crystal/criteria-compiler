@@ -109,6 +109,23 @@ for (const dir of listPacks(process.argv.slice(2))) {
     if (!extra.why) fail(name, `extraQuery ${extra.id} has no "why" — every correction must name what it recovers`);
   }
 
+  const checks = pack.checks ?? [];
+  const checkIds = new Set();
+  for (const check of checks) {
+    if (!check.id) fail(name, 'check without id');
+    else if (checkIds.has(check.id)) fail(name, `duplicate check id "${check.id}"`);
+    else checkIds.add(check.id);
+    if (!check.pattern) {
+      fail(name, `check ${check.id} has no pattern`);
+    } else {
+      try {
+        new RegExp(check.pattern, 'i');
+      } catch (err) {
+        fail(name, `check ${check.id} has an invalid regex: ${err.message}`);
+      }
+    }
+  }
+
   const stages = pack.stages ?? [];
   if (!stages.length) fail(name, 'stages is empty');
   const stageIds = new Set();

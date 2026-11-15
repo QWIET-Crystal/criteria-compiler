@@ -64,8 +64,20 @@
     { "id": "C", "label": "six families + 3 fixes", "dimensions": ["*"], "extraQueries": ["*"], "doiFallback": true }
   ],
 
-  "gold": "gold.csv",
-  "evaluation": {
+  "checks": [
+    {
+      "id": "sacrificial-agent",
+      "pattern": "sacrificial agent|hole scavenger|solvent and reactant",
+      "note": "a sacrificial agent, or a substrate doubling as the solvent; its yield is not comparable to a coupled run"
+    },
+    {
+      "id": "separate-experiment",
+      "pattern": "in addition|furthermore|we also investigated",
+      "note": "often starts a second experiment; check whether both products ever appear in one figure"
+    }
+  ],
+
+  "gold": "gold.csv",  "evaluation": {
     "positive": 2,
     "partial": 1,
     "negative": 0,

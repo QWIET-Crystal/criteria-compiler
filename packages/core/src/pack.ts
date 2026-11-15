@@ -26,6 +26,13 @@ export interface ExtraQuery {
   why?: string;
 }
 
+/** A text pattern to flag on a single paper. Belongs to the domain, not the engine. */
+export interface Check {
+  id: string;
+  pattern: string;
+  note?: string;
+}
+
 export interface StageDef {
   id: string;
   label: string;
@@ -45,6 +52,7 @@ export interface Pack {
   slots?: Slot[];
   dimensions: Dimension[];
   extraQueries?: ExtraQuery[];
+  checks?: Check[];
   stages: StageDef[];
   gold?: string | null;
   evaluation?: Record<string, unknown>;
