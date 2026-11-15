@@ -67,15 +67,25 @@ for (const dir of listPacks(process.argv.slice(2))) {
     continue;
   }
 
-  for (const key of ['id', 'title', 'object', 'dimensions', 'stages']) {
+  for (const key of ['id', 'title', 'dimensions', 'stages']) {
     if (!pack[key]) fail(name, `missing required field "${key}"`);
+  }
+
+  // Either one object slot or several. Several are ANDed, which is how a
+  // two-subject intersection (method × application) is expressed.
+  const slots = pack.slots ?? (pack.object ? [{ id: 'object', terms: pack.object.terms }] : []);
+  if (!slots.length) fail(name, 'needs either "object" or "slots"');
+  if (pack.slots && pack.object) warn(name, 'both "object" and "slots" present; "object" is ignored');
+  const slotIds = new Set();
+  for (const slot of slots) {
+    if (!slot.id) fail(name, 'slot without id');
+    else if (slotIds.has(slot.id)) fail(name, `duplicate slot id "${slot.id}"`);
+    else slotIds.add(slot.id);
+    if (!Array.isArray(slot.terms) || !slot.terms.length) fail(name, `slot ${slot.id} has no terms`);
+    else if (slot.terms.length === 1) warn(name, `slot ${slot.id} has a single term`);
   }
   if (pack.id !== name) warn(name, `id "${pack.id}" does not match directory name "${name}"`);
   if (!/^\d+\.\d+\.\d+$/.test(pack.version ?? '')) warn(name, 'version should be semver (x.y.z)');
-
-  const objectTerms = pack.object?.terms ?? [];
-  if (!objectTerms.length) fail(name, 'object.terms is empty');
-  if (objectTerms.length === 1) warn(name, 'object.terms has a single term; synonyms matter for recall');
 
   const dims = pack.dimensions ?? [];
   if (!dims.length) fail(name, 'dimensions is empty');

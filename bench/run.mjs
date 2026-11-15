@@ -54,23 +54,30 @@ function loadPack(dir) {
     throw new Error(`no pack.json in ${dir} — pass --pack <dir> pointing at a pack directory`);
   }
   const pack = JSON.parse(fs.readFileSync(file, 'utf8'));
-  for (const key of ['id', 'object', 'dimensions', 'stages']) {
+  for (const key of ['id', 'dimensions', 'stages']) {
     if (!pack[key]) throw new Error(`pack ${dir}: missing "${key}"`);
   }
+  if (!pack.slots && !pack.object) throw new Error(`pack ${dir}: missing "object" (or "slots")`);
   return pack;
 }
 
 const PACK = loadPack(PACK_DIR);
 const quote = (t) => `"${t}"`;
 const OR = (terms) => `(${terms.map(quote).join(' OR ')})`;
-const OBJECT_SLOT = OR(PACK.object.terms);
+
+// A pack may declare one object or several slots. Multiple slots are ANDed:
+// the CV/ESG pack needs "vision" AND "finance/ESG", which a single object cannot express.
+const SLOTS = PACK.slots ?? (PACK.object ? [{ id: 'object', terms: PACK.object.terms }] : []);
+if (!SLOTS.length) throw new Error(`pack ${PACK.id}: needs "object" or "slots"`);
+const SLOT_EXPR = SLOTS.map((slot) => OR(slot.terms)).join(' AND ');
+
 const DIMENSIONS = Object.fromEntries(PACK.dimensions.map((d) => [d.id, d]));
 const EXTRA = Object.fromEntries((PACK.extraQueries ?? []).map((e) => [e.id, e]));
 
 const dimensionQuery = (id) => {
   const dim = DIMENSIONS[id];
   if (!dim) throw new Error(`pack references unknown dimension "${id}"`);
-  return `${OR(dim.terms)} AND ${OBJECT_SLOT}`;
+  return `${OR(dim.terms)} AND ${SLOT_EXPR}`;
 };
 
 const STAGES = PACK.stages.map((stage) => {
@@ -277,9 +284,10 @@ function evaluate(pool, gold) {
 }
 
 async function main() {
-  const goldPath = path.join(PACK_DIR, PACK.gold ?? 'gold.csv');
-  if (!fs.existsSync(goldPath)) throw new Error(`missing ${goldPath}`);
-  const gold = parseCsv(fs.readFileSync(goldPath, 'utf8'));
+  const goldPath = PACK.gold ? path.join(PACK_DIR, PACK.gold) : null;
+  if (goldPath && !fs.existsSync(goldPath)) throw new Error(`missing ${goldPath}`);
+  const gold = goldPath ? parseCsv(fs.readFileSync(goldPath, 'utf8')) : null;
+  const retrievalOnly = !gold;
   const startedAt = Date.now();
   if (!API_KEY && VERBOSE) {
     process.stderr.write('\nnote: no OPENALEX_API_KEY. Anonymous calls share one daily budget per egress IP\n');
@@ -319,12 +327,13 @@ async function main() {
       if (VERBOSE) process.stderr.write(`total=${r.total} +${r.added} pool=${pool.size}${r.error ? ` ERR ${r.error}` : ''}\n`);
       if (r.error) process.stderr.write(`  ! query failed: ${r.error}\n`);
     }
-    if (stage.doiFallback) {
+    if (stage.doiFallback && gold) {
       for (const g of gold.filter((x) => Number(x.label) === 2)) {
         if (!pool.has(canonicalDoi(normalizeDoi(g.doi)))) await probeDoi(g.doi, pool);
       }
     }
-    results.push({ stage: stage.id, label: stage.label, queries: stage.queries.length, perQuery, ...evaluate(pool, gold) });
+    const scored = gold ? evaluate(pool, gold) : { poolSize: pool.size };
+    results.push({ stage: stage.id, label: stage.label, queries: stage.queries.length, perQuery, ...scored });
   }
 
   if (asJson) {
@@ -334,19 +343,31 @@ async function main() {
 
   const pad = (s, n) => String(s).padEnd(n);
   console.log('\ncriteria-compiler benchmark');
-  console.log(`gold: ${gold.length} records (${results[0].posTotal} positive / ${results[0].negTotal} negative)`);
-  console.log(`cap per query: ${CAP}\n`);
-  console.log(`${pad('stage', 34)}${pad('pool', 10)}${pad('positives', 14)}${pad('negatives', 12)}`);
-  console.log('-'.repeat(70));
-  for (const r of results) {
-    console.log(
-      `${pad(`${r.stage}. ${r.label}`, 34)}${pad(r.poolSize, 10)}${pad(`${r.posHit}/${r.posTotal}`, 14)}${pad(`${r.negHit}/${r.negTotal}`, 12)}`,
-    );
+  if (retrievalOnly) {
+    console.log(`pack: ${PACK.id} — retrieval-only, no gold set, no coverage claim`);
+  } else {
+    console.log(`gold: ${gold.length} records (${results[0].posTotal} positive / ${results[0].negTotal} negative)`);
   }
-  const last = results[results.length - 1];
-  if (last.posMissing.length) {
-    console.log(`\nstill missing (stage ${last.stage}):`);
-    for (const d of last.posMissing) console.log(`  - ${d}`);
+  console.log(`cap per query: ${CAP}\n`);
+  if (retrievalOnly) {
+    console.log(`${pad('stage', 34)}${pad('pool', 10)}${pad('queries', 10)}`);
+    console.log('-'.repeat(56));
+    for (const r of results) {
+      console.log(`${pad(`${r.stage}. ${r.label}`, 34)}${pad(r.poolSize, 10)}${pad(r.queries, 10)}`);
+    }
+  } else {
+    console.log(`${pad('stage', 34)}${pad('pool', 10)}${pad('positives', 14)}${pad('negatives', 12)}`);
+    console.log('-'.repeat(70));
+    for (const r of results) {
+      console.log(
+        `${pad(`${r.stage}. ${r.label}`, 34)}${pad(r.poolSize, 10)}${pad(`${r.posHit}/${r.posTotal}`, 14)}${pad(`${r.negHit}/${r.negTotal}`, 12)}`,
+      );
+    }
+    const last = results[results.length - 1];
+    if (last.posMissing?.length) {
+      console.log(`\nstill missing (stage ${last.stage}):`);
+      for (const d of last.posMissing) console.log(`  - ${d}`);
+    }
   }
   console.log(`\nelapsed: ${((Date.now() - startedAt) / 1000).toFixed(1)}s  (cap ${CAP}/query, timeout ${TIMEOUT_MS}ms)`);
   console.log('\nnote: negatives are records that look related but do not satisfy the criteria.');
