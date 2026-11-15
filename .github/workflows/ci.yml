@@ -28,7 +28,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node bench/parity.mjs
+      - run: node bench/validate-pack.mjs
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build

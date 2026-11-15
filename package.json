@@ -12,9 +12,9 @@
   "scripts": {
     "bench": "node bench/run.mjs",
     "bench:json": "node bench/run.mjs --json",
-    "parity": "node bench/parity.mjs",
+    "validate": "node bench/validate-pack.mjs",
     "build": "tsc -b packages/core packages/cli packages/mcp",
-    "test": "node bench/parity.mjs && vitest run",
+    "test": "node bench/validate-pack.mjs && vitest run",
     "typecheck": "tsc -b packages/core && pnpm -r typecheck"
   },
   "devDependencies": {

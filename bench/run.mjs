@@ -42,31 +42,56 @@ const cacheWrite = (url, data) => {
   } catch { /* cache is best-effort */ }
 };
 
-const H2O2 = '("hydrogen peroxide" OR H2O2)';
-const FAMILIES = {
-  COF: '("covalent organic framework" OR COF OR CTF)',
-  CMP: '("conjugated microporous polymer")',
-  PHI: '("heptazine imide" OR "poly(heptazine imide)")',
-  CN: '("carbon nitride" OR C3N4 OR "polymeric carbon nitride")',
-  CdS: '("cadmium sulfide" OR CdS)',
-  Bi: '(Bi2O2S OR "bismuth oxysulfide" OR CuInS2)',
+// ── Domain data comes from a pack, never from this file ──────────────────────
+// The runner knows nothing about chemistry. Everything field-specific lives in
+// packs/<id>/pack.json: object terms, retrieval dimensions, corrections, stages.
+const PACK_ARG = argValue('--pack', '');
+const PACK_DIR = PACK_ARG ? path.resolve(PACK_ARG) : path.join(ROOT, 'packs', 'cof-h2o2');
+
+function loadPack(dir) {
+  const file = path.join(dir, 'pack.json');
+  if (!fs.existsSync(file)) {
+    throw new Error(`no pack.json in ${dir} — pass --pack <dir> pointing at a pack directory`);
+  }
+  const pack = JSON.parse(fs.readFileSync(file, 'utf8'));
+  for (const key of ['id', 'object', 'dimensions', 'stages']) {
+    if (!pack[key]) throw new Error(`pack ${dir}: missing "${key}"`);
+  }
+  return pack;
+}
+
+const PACK = loadPack(PACK_DIR);
+const quote = (t) => `"${t}"`;
+const OR = (terms) => `(${terms.map(quote).join(' OR ')})`;
+const OBJECT_SLOT = OR(PACK.object.terms);
+const DIMENSIONS = Object.fromEntries(PACK.dimensions.map((d) => [d.id, d]));
+const EXTRA = Object.fromEntries((PACK.extraQueries ?? []).map((e) => [e.id, e]));
+
+const dimensionQuery = (id) => {
+  const dim = DIMENSIONS[id];
+  if (!dim) throw new Error(`pack references unknown dimension "${id}"`);
+  return `${OR(dim.terms)} AND ${OBJECT_SLOT}`;
 };
-const mat = (m) => `${m} AND ${H2O2}`;
 
-// Three fixes discovered by measurement, not by guessing:
-// 1) chemical formulas come back space-rendered from the API
-// 2) class-C papers never mention H2O2 (it is consumed in situ)
-// 3) some records have no abstract and are never returned by the search index
-const EXTRA = [
-  '(Bi2O2S OR "Bi 2 O 2 S" OR CuInS2) AND ("hydrogen peroxide" OR H2O2)',
-  '("carbon nitride" OR C3N4) AND methane AND ethanol',
-];
-
-const STAGES = [
-  { id: 'A', label: 'COF only', queries: [mat(FAMILIES.COF)], doiFallback: false },
-  { id: 'B', label: 'six material families', queries: Object.values(FAMILIES).map(mat), doiFallback: false },
-  { id: 'C', label: 'six families + 3 fixes', queries: [...Object.values(FAMILIES).map(mat), ...EXTRA], doiFallback: true },
-];
+const STAGES = PACK.stages.map((stage) => {
+  const dimIds = stage.dimensions.includes('*') ? PACK.dimensions.map((d) => d.id) : stage.dimensions;
+  const extraIds = (stage.extraQueries ?? []).includes('*')
+    ? Object.keys(EXTRA)
+    : (stage.extraQueries ?? []);
+  return {
+    id: stage.id,
+    label: stage.label,
+    queries: [
+      ...dimIds.map(dimensionQuery),
+      ...extraIds.map((id) => {
+        const extra = EXTRA[id];
+        if (!extra) throw new Error(`pack stage ${stage.id} references unknown extraQuery "${id}"`);
+        return extra.query;
+      }),
+    ],
+    doiFallback: Boolean(stage.doiFallback),
+  };
+});
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let RATE_LIMITED = 0;
@@ -252,7 +277,7 @@ function evaluate(pool, gold) {
 }
 
 async function main() {
-  const goldPath = path.join(HERE, 'gold.csv');
+  const goldPath = path.join(PACK_DIR, PACK.gold ?? 'gold.csv');
   if (!fs.existsSync(goldPath)) throw new Error(`missing ${goldPath}`);
   const gold = parseCsv(fs.readFileSync(goldPath, 'utf8'));
   const startedAt = Date.now();
@@ -263,7 +288,7 @@ async function main() {
   // Fail fast: a single tiny request tells us whether the network works at all.
   if (VERBOSE) process.stderr.write(`\nchecking api.openalex.org (timeout ${TIMEOUT_MS}ms)... `);
   try {
-    const probe = await api(workUrl(mat(FAMILIES.COF), 1, 1));
+    const probe = await api(workUrl(STAGES[0]?.queries[0] ?? dimensionQuery(PACK.dimensions[0].id), 1, 1));
     if (VERBOSE) process.stderr.write(`ok, ${probe.meta?.count ?? '?'} hits for the baseline query\n`);
   } catch (err) {
     process.stderr.write(`failed\n`);

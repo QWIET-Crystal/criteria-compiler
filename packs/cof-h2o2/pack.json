@@ -1,0 +1,78 @@
+{
+  "id": "cof-h2o2",
+  "title": "COF photocatalysis: H2O2 production coupled with organic transformation",
+  "version": "1.0.0",
+  "description": "Literature screening for a review on COF (and sibling frameworks) that produce H2O2 photocatalytically while converting an organic substrate.",
+
+  "object": {
+    "id": "h2o2",
+    "terms": ["hydrogen peroxide", "H2O2"],
+    "note": "The product slot. Every dimension query is ANDed with this."
+  },
+
+  "dimensions": [
+    {
+      "id": "COF",
+      "terms": ["covalent organic framework", "COF", "CTF"],
+      "scope": "COF",
+      "note": "CTF is counted inside COF by this review's convention, but must be flagged in notes."
+    },
+    {
+      "id": "CMP",
+      "terms": ["conjugated microporous polymer"],
+      "scope": "sibling",
+      "note": "The acronym CMP alone is ambiguous (chemical mechanical polishing), so only the full phrase is queried."
+    },
+    {
+      "id": "PHI",
+      "terms": ["heptazine imide", "poly(heptazine imide)"],
+      "scope": "sibling"
+    },
+    {
+      "id": "CN",
+      "terms": ["carbon nitride", "C3N4", "polymeric carbon nitride"],
+      "scope": "sibling"
+    },
+    {
+      "id": "CdS",
+      "terms": ["cadmium sulfide", "CdS"],
+      "scope": "sibling"
+    },
+    {
+      "id": "Bi",
+      "terms": ["Bi2O2S", "bismuth oxysulfide", "CuInS2"],
+      "scope": "sibling"
+    }
+  ],
+
+  "extraQueries": [
+    {
+      "id": "spaced-formula",
+      "why": "The API renders subscripts as spaces (Bi 2 O 2 S), so a literal query misses it.",
+      "query": "(Bi2O2S OR \"Bi 2 O 2 S\" OR CuInS2) AND (\"hydrogen peroxide\" OR H2O2)"
+    },
+    {
+      "id": "no-product-word",
+      "why": "Class-C papers consume H2O2 in situ and never name it in the abstract.",
+      "query": "(\"carbon nitride\" OR C3N4) AND methane AND ethanol"
+    }
+  ],
+
+  "stages": [
+    { "id": "A", "label": "COF only", "dimensions": ["COF"], "extraQueries": [], "doiFallback": false },
+    { "id": "B", "label": "six material families", "dimensions": ["*"], "extraQueries": [], "doiFallback": false },
+    { "id": "C", "label": "six families + 3 fixes", "dimensions": ["*"], "extraQueries": ["*"], "doiFallback": true }
+  ],
+
+  "gold": "gold.csv",
+  "evaluation": {
+    "positive": 2,
+    "partial": 1,
+    "negative": 0,
+    "positiveField": "label"
+  },
+
+  "output": {
+    "scopeDirective": "Coverage is reported on scope=COF only; sibling systems and composites are discussed but never counted into the COF denominator."
+  }
+}

@@ -46,6 +46,39 @@ elapsed: 51.3s
 | H₂O₂ 词改为可选 | C 型文献把 H₂O₂ 当场用掉，摘要根本不提 | 改用底物+产物词，14 条结果里命中 |
 | DOI 兜底直查 | 部分记录无摘要，检索接口不返回 | 按 DOI 解析成功 |
 
+以上三条不是写死在代码里的，它们在 `packs/cof-h2o2/pack.json` 的 `extraQueries` 里，每条都带 `why`。
+
+## 换一个领域：packs
+
+引擎里**没有任何领域词**。一个领域所需的全部内容都在一个 pack 目录里：
+
+```
+packs/cof-h2o2/
+├── pack.json    # 对象槽、检索轴、修正查询、阶段、金集路径
+├── gold.csv     # 人工判定（只存 DOI + 标签 + 依据）
+└── rules.md     # 判据与警示词，给人看的
+```
+
+换领域只需要改四个概念：
+
+| 字段 | 含义 | 本 pack 的值 |
+|---|---|---|
+| `object.terms` | 每篇候选都必须涉及的对象 | `hydrogen peroxide` / `H2O2` |
+| `dimensions[]` | **检索轴，每轴单独查询再合并**（合并成一个 OR 就失去了“哪条轴贡献了什么”） | COF / CMP / PHI / 碳氮 / CdS / 铋系 |
+| `extraQueries[]` | 因漏掉某篇而加的修正，必须写 `why` | 空格版化学式、去掉产物词 |
+| `stages[]` | 报哪几段、每段用哪些轴 | A 单轴 / B 全轴 / C 全轴+修正 |
+
+新建一个领域：
+
+```bash
+cp -r packs/_template packs/your-field
+# 改 pack.json；写 gold.csv（没有金集就把 gold 设为 null，只能 search，不能 bench）
+node bench/validate-pack.mjs packs/your-field
+node bench/run.mjs --pack packs/your-field
+```
+
+**不要为了跑绿基准去编标签。** 没有金集的 pack 允许存在，`validate-pack` 会标成 retrieval-only。
+
 ## 快速开始
 
 ```bash
@@ -100,11 +133,12 @@ Agent 会在"文献综述 / 搜不到 / 同义表述"这类请求上自动加载
 ## 仓库结构
 
 ```
-packages/core/   纯函数：归一化、材料族、OpenAlex 客户端、覆盖率。无 LLM、无状态、可单测
+packages/core/   纯函数：归一化、pack 加载、OpenAlex 客户端、覆盖率。无领域词、无 LLM、可单测
 packages/cli/    criteria-compiler bench | search | families
 packages/mcp/    MCP server（三个工具）
+packs/           领域包：pack.json + gold.csv + rules.md（引擎不读领域词，只读这些）
 skills/          DSH Skill：教 agent 何时用、怎么读结果
-bench/           金集 + 可复现基准（零依赖 runner）
+bench/           runner 与 pack 校验（零依赖）
 docs/decisions/  架构决策记录
 ```
 

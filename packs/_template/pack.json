@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "TEMPLATE — copy this directory to packs/<your-domain>/ and edit.",
+    "",
+    "The engine knows nothing about your field. It only knows:",
+    "  object.terms        the thing every candidate must involve",
+    "  dimensions[]        the retrieval axes; each is queried SEPARATELY and unioned,",
+    "                      because separate axes are what make recall visible",
+    "  extraQueries[]      corrections that exist because a specific paper was missed",
+    "  stages[]            which axes each reported stage uses",
+    "  gold.csv            human labels; see packs/cof-h2o2/gold.csv for the column contract",
+    "",
+    "Rules that keep this honest:",
+    "  1. Do not put a whole OR-chain into one dimension. Split it: separate axes",
+    "     are the measurement, one big OR is just a query.",
+    "  2. Every extraQueries entry needs a `why` naming the paper it recovers.",
+    "  3. gold.csv stores DOIs and labels only. Never store abstracts or full text.",
+    "  4. If you have no gold set yet, delete gold.csv and run search-only;",
+    "     do not invent labels to make the benchmark look green."
+  ],
+  "id": "template",
+  "title": "<domain>: <subject> related to <object>",
+  "version": "0.1.0",
+  "object": {
+    "id": "object",
+    "terms": ["<term A>", "<term B>"]
+  },
+  "dimensions": [
+    { "id": "D1", "terms": ["<synonym 1>", "<synonym 2>"], "scope": "core" },
+    { "id": "D2", "terms": ["<sibling system 1>"], "scope": "sibling" }
+  ],
+  "extraQueries": [],
+  "stages": [
+    { "id": "A", "label": "single dimension", "dimensions": ["D1"], "extraQueries": [], "doiFallback": false },
+    { "id": "B", "label": "all dimensions", "dimensions": ["*"], "extraQueries": [], "doiFallback": false }
+  ],
+  "gold": null,
+  "evaluation": { "positive": 2, "partial": 1, "negative": 0, "positiveField": "label" }
+}
