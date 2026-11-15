@@ -2,86 +2,105 @@
 /**
  * MCP server for criteria-compiler.
  *
- * Three tools, deliberately narrow:
- *   search_candidates  multi-family recall (never single-family)
- *   check_paper        single-record inspection: normalization + rule flags
- *   coverage_report    re-run the benchmark and return the coverage table
+ * Every tool takes an optional `pack` (a directory). The server itself knows no
+ * domain: it loads whatever pack it is pointed at and reports what that pack
+ * defines. Without a gold set a pack can be searched but not scored.
  *
- * There is intentionally no `judge_paper`: v0.1 does not call an LLM.
- * A model-based judge belongs behind an explicit provider option in v0.2.
+ * There is intentionally no LLM judge in v0.1.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import {
-  FAMILIES,
-  FIX_QUERIES,
-  STAGES,
   collect,
+  defaultPackDir,
   evaluate,
-  familyQuery,
+  goldPathOf,
+  loadPackFromDir,
   normalizeDoi,
   canonicalDoi,
   hasFormula,
   parseGoldCsv,
-  probeDoi,
-  type FamilyName,
+  runStage,
+  orExpr,
+  slotExpr,
+  slotsOf,
+  stagesOf,
   type GoldRecord,
   type OpenAlexWork,
 } from '@criteria-compiler/core';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-/** dist/server.js -> packages/mcp/dist -> repo root */
-const GOLD_PATH = process.env.GOLD_CSV ?? path.resolve(HERE, '..', '..', '..', 'bench', 'gold.csv');
-
-let goldCache: GoldRecord[] | null = null;
-function loadGold(): GoldRecord[] {
-  if (goldCache) return goldCache;
-  if (!fs.existsSync(GOLD_PATH)) {
-    throw new Error(`gold set not found at ${GOLD_PATH}; set GOLD_CSV to override`);
-  }
-  goldCache = parseGoldCsv(fs.readFileSync(GOLD_PATH, 'utf8'));
-  return goldCache;
-}
-
 const server = new McpServer({ name: 'criteria-compiler', version: '0.1.0' });
 
 const mailto = process.env.OPENALEX_MAILTO;
-// Without this the server silently falls back to the shared anonymous budget and
-// every search fails with an opaque 429.
 const apiKey = process.env.OPENALEX_API_KEY;
+
+const goldCache = new Map<string, GoldRecord[]>();
+function loadGold(dir: string, packGold: string | null): GoldRecord[] | null {
+  if (!packGold) return null;
+  const cached = goldCache.get(dir);
+  if (cached) return cached;
+  if (!fs.existsSync(packGold)) return null;
+  const records = parseGoldCsv(fs.readFileSync(packGold, 'utf8'));
+  goldCache.set(dir, records);
+  return records;
+}
+
+function options(cap: number | undefined): { cap?: number; mailto?: string; apiKey?: string } {
+  const opts: { cap?: number; mailto?: string; apiKey?: string } = {};
+  if (typeof cap === 'number') opts.cap = cap;
+  if (mailto) opts.mailto = mailto;
+  if (apiKey) opts.apiKey = apiKey;
+  return opts;
+}
 
 server.tool(
   'search_candidates',
   {
-    families: z.array(z.string()).optional().describe('Material family names, e.g. ["COF","CMP"]. Omit for all six.'),
-    extraQueries: z.array(z.string()).optional().describe('Raw OpenAlex title+abstract queries to union in.'),
-    cap: z.number().int().min(200).max(5000).optional(),
+    pack: z.string().optional().describe('Pack directory. Omit to use $CRITERIA_PACK_DIR or packs/cof-h2o2.'),
+    dimensions: z.array(z.string()).optional().describe('Dimension ids to query. Omit for all axes of the pack.'),
+    extraQueries: z.array(z.string()).optional().describe('ExtraQuery ids to add. Omit for none.'),
+    cap: z.number().int().min(100).max(2000).optional(),
   },
-  async ({ families, extraQueries, cap }) => {
-    const names = (families?.length ? families : Object.keys(FAMILIES)) as FamilyName[];
-    const unknown = names.filter((n) => !(n in FAMILIES));
+  async ({ pack: packDir, dimensions, extraQueries, cap }) => {
+    const dir = packDir ?? defaultPackDir();
+    const pack = loadPackFromDir(dir);
+    const known = new Set(pack.dimensions.map((d) => d.id));
+    const dims = dimensions?.length ? dimensions : pack.dimensions.map((d) => d.id);
+    const unknown = dims.filter((d) => !known.has(d));
     if (unknown.length) {
-      return { content: [{ type: 'text', text: `unknown families: ${unknown.join(', ')}` }], isError: true };
+      return { content: [{ type: 'text', text: `unknown dimensions: ${unknown.join(', ')}` }], isError: true };
     }
+
+    const knownExtras = new Map((pack.extraQueries ?? []).map((e) => [e.id, e]));
+    const extras = extraQueries ?? [];
+    const badExtras = extras.filter((id) => !knownExtras.has(id));
+    if (badExtras.length) {
+      return { content: [{ type: 'text', text: `unknown extraQueries: ${badExtras.join(', ')}` }], isError: true };
+    }
+
+    const stage = {
+      id: 'adhoc',
+      label: 'ad-hoc selection',
+      queries: [
+        ...dims.map((id) => {
+          const dim = pack.dimensions.find((d) => d.id === id)!;
+          return `${orExpr(dim.terms)} AND ${slotExpr(pack)}`;
+        }),
+        ...extras.map((id) => knownExtras.get(id)!.query),
+      ],
+      doiFallback: false,
+    };
+
     const pool = new Map<string, OpenAlexWork>();
-    // exactOptionalPropertyTypes: build the options object conditionally instead of
-    // passing `{ cap: undefined }`, which is a type error under strict settings.
-    const opts: { cap?: number; mailto?: string; apiKey?: string } = {};
-    if (typeof cap === 'number') opts.cap = cap;
-    if (mailto) opts.mailto = mailto;
-    if (apiKey) opts.apiKey = apiKey;
-    for (const name of names) await collect(familyQuery(name), pool, opts);
-    for (const q of extraQueries ?? []) await collect(q, pool, opts);
+    for (const query of stage.queries) await collect(query, pool, options(cap));
     const sample = [...pool.values()].slice(0, 50);
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ poolSize: pool.size, families: names, sample }, null, 2),
+          text: JSON.stringify({ pack: pack.id, dir, poolSize: pool.size, dimensions: dims, sample }, null, 2),
         },
       ],
     };
@@ -91,17 +110,16 @@ server.tool(
 server.tool(
   'check_paper',
   {
-    doi: z.string().describe('DOI of the paper to inspect'),
-    text: z.string().optional().describe('Optional title+abstract text, if you already have it'),
+    doi: z.string().describe('DOI of the paper'),
+    text: z.string().optional().describe('Optional title+abstract, if you already have it'),
   },
   async ({ doi, text }) => {
     const key = canonicalDoi(normalizeDoi(doi));
     const flags: string[] = [];
     if (text) {
       if (hasFormula(text, 'H2O2')) flags.push('mentions H2O2');
-      if (hasFormula(text, 'Bi2O2S')) flags.push('mentions Bi2O2S (space-rendered forms included)');
-      if (/\bin addition\b|\bfurthermore\b/i.test(text)) flags.push('contains "In addition"/"Furthermore" — likely a separate experiment');
-      if (/\bsacrificial agent\b|\bhole scavenger\b/i.test(text)) flags.push('mentions a sacrificial agent');
+      if (/\bin addition\b|\bfurthermore\b/i.test(text)) flags.push('contains "In addition"/"Furthermore" — check whether it starts a separate experiment');
+      if (/\bsacrificial agent\b|\bhole scavenger\b|\bsolvent and reactant\b/i.test(text)) flags.push('mentions a sacrificial agent or a substrate that doubles as solvent');
     }
     return {
       content: [
@@ -111,7 +129,7 @@ server.tool(
             {
               doi: key,
               flags,
-              reminder: 'This tool never returns a relevance verdict. Read the figure and the solvent before deciding.',
+              reminder: 'No verdict is returned. Read the figure and the solvent before deciding.',
             },
             null,
             2,
@@ -125,38 +143,36 @@ server.tool(
 server.tool(
   'coverage_report',
   {
-    stage: z.enum(['cof-only', 'six-families', 'six-families-with-fixes']).optional(),
-    cap: z.number().int().min(200).max(5000).optional(),
+    pack: z.string().optional().describe('Pack directory. Omit to use the default pack.'),
+    stage: z.string().optional().describe('Stage id defined by the pack. Defaults to the last stage.'),
+    cap: z.number().int().min(100).max(2000).optional(),
   },
-  async ({ stage, cap }) => {
-    const gold = loadGold();
-    const target = STAGES.find((s) => s.name === (stage ?? 'six-families-with-fixes')) ?? STAGES[2]!;
-    if (!target) return { content: [{ type: 'text', text: 'no stage' }], isError: true };
-    const pool = new Map<string, OpenAlexWork>();
-    const opts: { cap?: number; mailto?: string; apiKey?: string } = {};
-    if (typeof cap === 'number') opts.cap = cap;
-    if (mailto) opts.mailto = mailto;
-    if (apiKey) opts.apiKey = apiKey;
-    for (const name of target.families) await collect(familyQuery(name), pool, opts);
-    if (target.fixes) {
-      for (const query of Object.values(FIX_QUERIES)) await collect(query, pool, opts);
+  async ({ pack: packDir, stage, cap }) => {
+    const dir = packDir ?? defaultPackDir();
+    const pack = loadPackFromDir(dir);
+    const gold = loadGold(dir, goldPathOf(pack, dir));
+    if (!gold) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              { pack: pack.id, dir, retrievalOnly: true, reason: 'no gold set in this pack; coverage cannot be computed' },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
     }
-    if (target.doiFallback) {
-      for (const g of gold.filter((x) => Number(x.label) === 2)) {
-        const key = canonicalDoi(normalizeDoi(g.doi));
-        if (!pool.has(key)) await probeDoi(g.doi, pool);
-      }
-    }
-    const result = evaluate(pool, gold);
+    const stages = stagesOf(pack);
+    const target = stage ?? stages[stages.length - 1]!.id;
+    const result = await runStage(pack, target, gold, options(cap));
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(
-            { stage: target.name, gold: { path: GOLD_PATH, records: gold.length }, ...result },
-            null,
-            2,
-          ),
+          text: JSON.stringify({ pack: pack.id, gold: { path: goldPathOf(pack, dir), records: gold.length }, ...result }, null, 2),
         },
       ],
     };

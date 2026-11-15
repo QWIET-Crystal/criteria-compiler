@@ -2,12 +2,7 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import {
-  FAMILIES,
-  familyQuery,
-  searchWorks,
-  type FamilyName,
-} from '@criteria-compiler/core';
+import { defaultPackDir, loadPackFromDir, searchWorks, slotsOf, stagesOf } from '@criteria-compiler/core';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
@@ -16,21 +11,28 @@ function usage(): void {
   console.log(`criteria-compiler <command> [options]
 
 Commands
-  bench                     run the reproducible benchmark (needs network)
+  bench [opts]              run the benchmark of a pack (needs network)
   search <query>            run one raw OpenAlex title+abstract query
-  families                  print the six material-family queries
-  help                      show this message
+  pack                      show the pack currently in use
+  help                      this message
 
-Options
+Global
+  --pack <dir>              pack directory (default: $CRITERIA_PACK_DIR or packs/cof-h2o2)
   --json                    machine-readable output
-  --mailto <email>          OpenAlex polite-pool contact
-  --limit <n>               max records for 'search' (default 20)
+  --api-key <key>           OpenAlex key (default: $OPENALEX_API_KEY)
+  --mailto <email>          OpenAlex contact (default: $OPENALEX_MAILTO)
 
 Examples
-  criteria-compiler bench
+  criteria-compiler pack
+  criteria-compiler bench --stage A
+  criteria-compiler bench --pack packs/cv-finance-esg --stage B
   criteria-compiler search '("covalent organic framework") AND ("hydrogen peroxide")'
-  criteria-compiler families --json
 `);
+}
+
+function argValue(argv: string[], name: string): string | undefined {
+  const i = argv.indexOf(name);
+  return i >= 0 && argv[i + 1] ? argv[i + 1] : undefined;
 }
 
 function runBench(args: string[]): Promise<number> {
@@ -45,6 +47,7 @@ async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   const json = argv.includes('--json');
   const command = argv[0];
+  const packDir = argValue(argv, '--pack');
 
   if (!command || command === 'help' || command === '--help') {
     usage();
@@ -55,13 +58,24 @@ async function main(): Promise<number> {
     return runBench(argv.slice(1));
   }
 
-  if (command === 'families') {
-    const entries = Object.entries(FAMILIES) as [FamilyName, string][];
+  if (command === 'pack') {
+    const dir = packDir ?? defaultPackDir();
+    const pack = loadPackFromDir(dir);
+    const stages = stagesOf(pack);
+    const slots = slotsOf(pack);
     if (json) {
-      console.log(JSON.stringify({ families: Object.fromEntries(entries.map(([k]) => [k, familyQuery(k)])) }, null, 2));
+      console.log(JSON.stringify({ dir, id: pack.id, title: pack.title, slots, stages }, null, 2));
       return 0;
     }
-    for (const [name] of entries) console.log(`${name}\t${familyQuery(name)}`);
+    console.log(`pack: ${pack.id}  ${pack.title ?? ''}`);
+    console.log(`dir:  ${dir}`);
+    console.log(`gold: ${pack.gold ?? '(none — retrieval-only)'}`);
+    console.log('\nslots (ANDed):');
+    for (const s of slots) console.log(`  ${s.id.padEnd(12)} ${s.terms.length} terms`);
+    console.log('\ndimensions (queried separately, then unioned):');
+    for (const d of pack.dimensions) console.log(`  ${d.id.padEnd(12)} ${d.scope ?? '-'.padEnd(8)} ${d.terms.length} terms`);
+    console.log('\nstages:');
+    for (const s of stages) console.log(`  ${s.id}  ${s.label}  (${s.queries.length} queries${s.doiFallback ? ', DOI fallback' : ''})`);
     return 0;
   }
 
@@ -71,12 +85,9 @@ async function main(): Promise<number> {
       console.error('search needs a query');
       return 2;
     }
-    const limitIndex = argv.indexOf('--limit');
-    const limit = limitIndex >= 0 ? Number(argv[limitIndex + 1]) || 20 : 20;
-    const mailtoIndex = argv.indexOf('--mailto');
-    const mailto = mailtoIndex >= 0 ? argv[mailtoIndex + 1] : process.env.OPENALEX_MAILTO;
-    const apiKeyIndex = argv.indexOf('--api-key');
-    const apiKey = apiKeyIndex >= 0 ? argv[apiKeyIndex + 1] : process.env.OPENALEX_API_KEY;
+    const limit = Number(argValue(argv, '--limit') ?? 20) || 20;
+    const mailto = argValue(argv, '--mailto') ?? process.env.OPENALEX_MAILTO;
+    const apiKey = argValue(argv, '--api-key') ?? process.env.OPENALEX_API_KEY;
     const works = await searchWorks(query, 1, Math.min(limit, 200), mailto, apiKey);
     if (json) console.log(JSON.stringify(works, null, 2));
     else for (const w of works) console.log(`${w.year ?? '----'}\t${w.doi || '(no doi)'}\t${w.title}`);
@@ -88,7 +99,9 @@ async function main(): Promise<number> {
   return 2;
 }
 
-main().then((code) => process.exit(code)).catch((err: unknown) => {
-  console.error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
-});
+main()
+  .then((code) => process.exit(code))
+  .catch((err: unknown) => {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
