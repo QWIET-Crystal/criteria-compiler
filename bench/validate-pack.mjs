@@ -170,6 +170,23 @@ for (const dir of listPacks(process.argv.slice(2))) {
   }
 }
 
+// Rule: terms go straight into a boolean query, so they must not be able to
+// break out of the quoted phrase. Mirrors assertSafeTerm() in packages/core/src/pack.ts.
+const SAFE_TERM = /^[\p{L}\p{N}\s\-.,()+/'’·]+$/u;
+for (const pack of validated) {
+  const slots = pack.slots ?? (pack.object ? [pack.object] : []);
+  const all = [
+    ...slots.flatMap((s) => s.terms ?? []),
+    ...(pack.dimensions ?? []).flatMap((d) => d.terms ?? []),
+  ];
+  for (const term of all) {
+    const value = String(term ?? '').trim();
+    if (!value) fail(pack.id, 'empty term');
+    else if (value.length > 80) fail(pack.id, `term is longer than 80 characters: ${JSON.stringify(value.slice(0, 30))}…`);
+    else if (!SAFE_TERM.test(value)) fail(pack.id, `term can break the query grammar: ${JSON.stringify(value)}`);
+  }
+}
+
 // Rule: the engine must not know a pack's vocabulary.
 // Collect every declared term and fail if one appears under packages/*/src.
 const terms = new Map();

@@ -73,7 +73,29 @@ export interface Stage {
   doiFallback: boolean;
 }
 
-const quote = (t: string): string => `"${t}"`;
+const quote = (t: string): string => `"${assertSafeTerm(t)}"`;
+
+/**
+ * Terms are interpolated into a boolean query string, so one that contains a
+ * quote or a backslash can end the phrase early and inject query syntax. A
+ * shared pack could then silently widen what gets retrieved, with nothing in the
+ * results to show it happened. Allowlist only — keep this in sync with the same
+ * check in bench/validate-pack.mjs.
+ */
+const SAFE_TERM = /^[\p{L}\p{N}\s\-.,()+/'’·]+$/u;
+const MAX_TERM_LENGTH = 80;
+
+export function assertSafeTerm(term: string): string {
+  const value = String(term ?? '').trim();
+  if (!value) throw new Error('pack term is empty');
+  if (value.length > MAX_TERM_LENGTH) {
+    throw new Error(`pack term is longer than ${MAX_TERM_LENGTH} characters`);
+  }
+  if (!SAFE_TERM.test(value)) {
+    throw new Error(`pack term contains characters that can break the query grammar: ${JSON.stringify(value)}`);
+  }
+  return value;
+}
 
 /** A disjunction of terms. Phrases are quoted so multi-word terms stay phrases. */
 export function orExpr(terms: string[]): string {

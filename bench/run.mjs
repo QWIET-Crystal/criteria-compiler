@@ -354,8 +354,17 @@ async function runQueryAll(search, pool) {
   return { total, added, error: errors.length ? errors.join('; ') : undefined };
 }
 
-async function probeDoi(doi, pool) {  const key = canonicalDoi(normalizeDoi(doi));
+// A DOI becomes part of the request path, so an unvalidated one can rewrite the
+// request. Mirrors assertSafeDoi() in packages/core/src/normalize.ts.
+const SAFE_DOI = /^10\.[0-9]{4,9}\/[A-Za-z0-9._;()/:+-]+$/;
+
+async function probeDoi(doi, pool) {
+  const key = canonicalDoi(normalizeDoi(doi));
   if (!key || pool.has(key)) return false;
+  if (!SAFE_DOI.test(key)) {
+    process.stderr.write(`\nskipped a doi that could rewrite the request: ${JSON.stringify(doi)}\n`);
+    return false;
+  }
   try {
     const w = await api(`https://api.openalex.org/works/https://doi.org/${key}`);
     pool.set(key, {

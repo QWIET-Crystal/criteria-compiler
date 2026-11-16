@@ -39,6 +39,24 @@ export function normalizeDoi(raw: string): string {
 }
 
 /**
+ * A DOI is placed into a request *path* (`/works/https://doi.org/<doi>`), so an
+ * unvalidated one can rewrite that request. Allowlist rather than blocklist: a
+ * DOI that fails this is almost certainly malformed anyway.
+ */
+const SAFE_DOI = /^10\.[0-9]{4,9}\/[A-Za-z0-9._;()/:+-]+$/;
+
+export function assertSafeDoi(raw: string): string {
+  const doi = normalizeDoi(raw);
+  if (!doi) throw new Error('doi is empty');
+  if (doi.length > 300) throw new Error(`doi is longer than 300 characters`);
+  if (doi.includes('..')) throw new Error(`doi contains a path traversal segment: ${JSON.stringify(raw)}`);
+  if (!SAFE_DOI.test(doi)) {
+    throw new Error(`doi contains characters that can rewrite the request path: ${JSON.stringify(raw)}`);
+  }
+  return doi;
+}
+
+/**
  * Angewandte publishes the same article twice: `anie.` (International Edition)
  * and `ange.` (German Edition) carry different DOIs. They must collapse to one key.
  */
