@@ -48,7 +48,16 @@ try {
 record('A2', '槽位（必须有）', slots.length > 0, `${slots.length} 个槽位`);
 record('A2', '检索轴（可枚举的旁支）', (pack.dimensions ?? []).length > 0, `${(pack.dimensions ?? []).length} 条轴`);
 record('A2', '修正项（带 why）', extras.length > 0, `${extras.length} 条修正`);
-record('A2', '判定钩子（pattern 或 absent）', checks.length > 0, `${checks.length} 条`);
+// 一个 pack 可以不配金集、不做判定——那是它声明的形态（retrieval-only）。
+// 只有「配了金集」或「自称做判定」时才要求齐全，否则自检会对合法的包误报。
+const retrievalOnly = !pack.gold;
+
+record(
+  'A2',
+  '判定钩子（pattern 或 absent）',
+  checks.length > 0 || retrievalOnly,
+  retrievalOnly ? 'retrieval-only：只做检索，不做判定' : `${checks.length} 条`,
+);
 
 // ── B2 每条修正都绑定一篇具体漏检文献 ────────────────────────────────────────
 const noWhy = extras.filter((extra) => !extra.why);
@@ -80,8 +89,8 @@ record(
 );
 
 // ── 金集：正负都要有，否则测不出误报 ────────────────────────────────────────
-let goldInfo = '未配置金集（retrieval-only）';
-let goldOk = false;
+let goldInfo = 'retrieval-only：没有金集，只能报产出，不能报覆盖率';
+let goldOk = retrievalOnly;
 if (pack.gold) {
   const file = path.resolve(PACK_DIR, pack.gold);
   if (fs.existsSync(file)) {
@@ -106,6 +115,14 @@ for (const item of results) {
 }
 console.log('─'.repeat(72));
 console.log(`${okCount}/${results.length} 条通过`);
+
+// A1′ 的提醒：多槽是 AND 在一起的，交叉率只能联网测。离线自检**不能**替它下结论，
+// 但可以让「换领域前先跑轴体检」这句话出现在该出现的地方——包括在没通过的时候。
+if (slots.length > 1) {
+  console.log(`\n提示：这个 pack 有 ${slots.length} 个槽 AND 在一起（${slots.map((slot) => slot.id).join(' × ')}）。`);
+  console.log('自检是离线的，测不出槽之间会不会撞成很小的池子。换领域前先跑一次轴体检：');
+  console.log(`  node bench/axis-yield.mjs --pack ${path.relative(ROOT, PACK_DIR) || '.'}`);
+}
 
 if (okCount !== results.length) {
   console.log('\n有未通过的项。注意：自检只判「树和代码是否一致」，不判判据准不准——');
