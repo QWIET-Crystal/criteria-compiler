@@ -11,6 +11,7 @@
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "bench": "node bench/run.mjs",
+    "start": "node bench/start.mjs",
     "axes": "node bench/axis-yield.mjs",
     "bench:json": "node bench/run.mjs --json",
     "validate": "node bench/validate-pack.mjs",
