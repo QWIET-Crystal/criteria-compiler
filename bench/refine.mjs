@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
 import { evaluate } from './lib/criteria.mjs';
+import { appendHistory, describeDiff, diffSnapshot, isEmptyDiff, lastSnapshot, snapshotOf } from './lib/history.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -353,7 +354,35 @@ async function main() {
       addedTerms: [...addedMust, ...addedNot],
     },
   };
-  fs.writeFileSync(path.join(PACK_DIR, `draft-v${next.version}.json`), JSON.stringify(next, null, 2) + '\n', 'utf8');
+  // ── 变更史 ────────────────────────────────────────────────────────────
+  // 先看「人是不是在上次记录之后手工改过」——那是判断链上最容易被丢掉的一环。
+  // 人手工改的判据如果没记下来，下次就没人知道为什么。
+  let withHistory = next;
+  const prevSnap = lastSnapshot(draft);
+  const curSnap = snapshotOf(draft);
+  if (prevSnap) {
+    const manualDiff = diffSnapshot(prevSnap, curSnap);
+    if (!isEmptyDiff(manualDiff)) {
+      withHistory = appendHistory(withHistory, {
+        by: 'human',
+        what: '手工修改判据',
+        why: '检测到草案在上次记录之后被直接改过',
+        diff: manualDiff,
+        snapshotOverride: curSnap,
+      });
+    }
+  }
+  const refineDiff = diffSnapshot(curSnap, snapshotOf(next));
+  if (!isEmptyDiff(refineDiff)) {
+    withHistory = appendHistory(withHistory, {
+      by: 'refine.mjs',
+      what: describeDiff(refineDiff),
+      why: hasLabels ? `基于 ${labeled.length} 篇标注（一致 ${agreed}/${total}）` : '没有标注，只按当前判据重拉',
+      diff: refineDiff,
+    });
+  }
+
+  fs.writeFileSync(path.join(PACK_DIR, `draft-v${next.version}.json`), JSON.stringify({ ...next, history: withHistory.history }, null, 2) + '\n', 'utf8');
 
   console.log('\n改了什么');
   console.log('─'.repeat(72));

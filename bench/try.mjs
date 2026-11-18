@@ -16,6 +16,7 @@ import path from 'node:path';
 
 import { evaluate } from './lib/criteria.mjs';
 import { labelOf, loadWorks, normalizeDoi, readDraft, readQueue, ROOT } from './lib/io.mjs';
+import { describeDiff } from './lib/history.mjs';
 
 const argv = process.argv.slice(2);
 const argValue = (name, fallback) => {
@@ -42,6 +43,30 @@ if (!draft) {
   process.exit(1);
 }
 const queue = readQueue(PACK_DIR, argValue('--queue', ''));
+
+// --history：只看这份草案的来路。改过什么、谁改的、为什么。
+if (argv.includes('--history')) {
+  const history = draft.data.history ?? [];
+  console.log(`\n判据变更史 · ${path.relative(ROOT, draft.file)}`);
+  console.log('─'.repeat(78));
+  if (!history.length) {
+    console.log('  这份草案没有变更记录（早于 2026-11-18 的版本）。');
+    console.log('  没有记录的变化等于耍赖：过两周没人说得清「当时为什么这么定」。');
+    process.exit(0);
+  }
+  for (const entry of history) {
+    const at = String(entry.at ?? '').replace('T', ' ').slice(0, 16);
+    console.log(`  v${entry.version}  ${at}  ${String(entry.by).padEnd(10)} ${entry.what}`);
+    if (entry.diff && !entry.diff.initial) {
+      const detail = describeDiff(entry.diff);
+      if (detail && detail !== entry.what) console.log(`       ${detail}`);
+    }
+    if (entry.why) console.log(`       理由：${entry.why}`);
+  }
+  console.log('');
+  console.log('  每一条都对应一次真实的改动。人改的和机器改的分开记，不混在一起。');
+  process.exit(0);
+}
 
 const criteria = draft.data.criteria ?? [];
 if (!criteria.length) {

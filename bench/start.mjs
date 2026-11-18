@@ -21,6 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
 import { evaluate, findCooccurrences } from './lib/criteria.mjs';
+import { appendHistory } from './lib/history.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -307,8 +308,16 @@ async function main() {
   }
   draft.openQuestions.push('槽位怎么切，脚本不替你决定。下面这几篇边界论文标完，再回来定。');
 
+  // 起笔就记一条史。每次改动都留痕，才能回答「当时为什么这么定」。
+  const drafted = appendHistory(draft, {
+    by: 'start.mjs',
+    what: '起草',
+    why: `来自 ${posWorks.length} 篇正例、${negWorks.length} 篇反例；${terms.length} 个区分词`,
+    diff: { initial: true },
+  });
+
   fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(path.join(outDir, 'draft.json'), JSON.stringify(draft, null, 2) + '\n', 'utf8');
+  fs.writeFileSync(path.join(outDir, 'draft.json'), JSON.stringify(drafted, null, 2) + '\n', 'utf8');
   fs.writeFileSync(path.join(outDir, 'intake.md'), renderIntake(draft, posWorks, negWorks), 'utf8');
 
   console.log('\n判据草案（这是要给你改的，不是结论）');

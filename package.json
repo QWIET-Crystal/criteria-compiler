@@ -16,7 +16,7 @@
     "bench:json": "node bench/run.mjs --json",
     "validate": "node bench/validate-pack.mjs",
     "build": "tsc -b packages/core packages/cli packages/mcp",
-    "test": "node bench/validate-pack.mjs && node bench/lib/criteria.selftest.mjs && vitest run",
+    "test": "node bench/validate-pack.mjs && node bench/lib/criteria.selftest.mjs && node bench/lib/history.selftest.mjs && vitest run",
     "typecheck": "tsc -b packages/core && pnpm -r typecheck",
     "refine": "node bench/refine.mjs",
     "ledger": "node bench/ledger.mjs",
