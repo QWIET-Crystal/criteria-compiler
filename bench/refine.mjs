@@ -215,8 +215,9 @@ async function main() {
     const results = evaluate(criteria, textOf(doi));
     const exclusion = results.find((r) => r.kind === 'absent');
     if (exclusion && !exclusion.matched) return false; // 踩到排除信号，直接不算
-    const positive = results.filter((r) => r.kind !== 'absent' && r.matched);
-    return positive.length >= 2;
+    const coOccur = results.filter((r) => r.kind === 'co-occur');
+    // 有共现判据就以共现为准；没有才退回 any。与 bench/try.mjs 保持一致。
+    return coOccur.length ? coOccur.some((r) => r.matched) : results.some((r) => r.kind !== 'absent' && r.matched);
   };
 
   // ── 1. 校准松紧 ───────────────────────────────────────────────────────────

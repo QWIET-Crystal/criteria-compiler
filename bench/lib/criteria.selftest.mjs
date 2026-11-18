@@ -47,7 +47,10 @@ const TEXT = [
 {
   const [same] = evaluate([{ id: 'x', kind: 'co-occur', terms: ['couples', 'reactor'] }], TEXT);
   check('co-occur：同句命中', same.matched === true);
-  check('co-occur：证据是一整句', same.evidence[0]?.quote.includes('couples') && same.evidence[0]?.quote.includes('reactor'));
+  check(
+    'co-occur：证据逐个词给出，能核对是哪两个说法',
+    same.evidence.length === 2 && same.evidence.every((span) => span.quote === TEXT.slice(span.start, span.end)),
+  );
 
   const [apart] = evaluate([{ id: 'x', kind: 'co-occur', terms: ['couples', 'irradiation'] }], TEXT);
   check('co-occur：分处两句就不命中', apart.matched === false);

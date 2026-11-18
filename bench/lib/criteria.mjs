@@ -98,14 +98,18 @@ export function evaluate(criteria, text) {
     }
 
     // co-occur：找一句里同时出现全部词。
-    for (const sentence of sentences) {
+    for (const [index, sentence] of sentences.entries()) {
       const inThis = terms.map((term) => ({ term, spans: spansOf(sentence.text, term, sentence.offset) }));
       if (inThis.every((entry) => entry.spans.length)) {
         return {
-          id, kind: 'co-occur', matched: true,
-          evidence: [{ start: sentence.offset, end: sentence.offset + sentence.text.length, quote: sentence.text.slice(0, 240) }],
+          id,
+          kind: 'co-occur',
+          matched: true,
+          // 证据给「每个词各自的命中片段」，不是整句。
+          // 整句一截断，人就核对不了；给片段才能一眼看出是哪两个说法撞在一起的。
+          evidence: inThis.flatMap((entry) => entry.spans.slice(0, 1)),
           note,
-          reason: `${terms.length} 个说法落在同一句里`,
+          reason: `${terms.length} 个说法落在第 ${index + 1} 句里`,
         };
       }
     }
