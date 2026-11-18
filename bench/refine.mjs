@@ -33,6 +33,7 @@ const argValue = (name, fallback) => {
 };
 const PACK_ID = argValue('--pack', '').trim();
 const CAP = Math.max(100, Math.min(1000, Number(argValue('--cap', '400')) || 400));
+const PICK = Math.max(10, Math.min(200, Number(argValue('--pick', '50')) || 50));
 if (!PACK_ID) fail('用法：node bench/refine.mjs --pack <包名>');
 
 const PACK_DIR = path.join(ROOT, 'packs', PACK_ID);
@@ -194,7 +195,14 @@ async function main() {
   console.log('─'.repeat(72));
   console.log(`队列 ${queue.length} 篇｜已标 ${labeled.length} 篇｜未标 ${unlabeled.length} 篇｜当前阈值 ≥${currentMinHits} 个区分词`);
 
-  if (!labeled.length) fail('还没有标注。把 review-queue 最后一列填上 2 / 0 / 1 再来。');
+  // 没有标注也允许跑——那就是「只按新判据重拉一批」。
+  // 改完判据之后最常做的就是这个动作：旧队列是按上一版挑的，已经过期了。
+  const hasLabels = labeled.length > 0;
+  if (!hasLabels) {
+    console.log('');
+    console.log('  这份队列还没有标注 → 跳过学习和校准，只按当前判据重新拉一批。');
+    console.log('  想让它学，就先把上一轮的队列标完。');
+  }
 
   const works = await loadWorks(queue.map((row) => row.doi));
   const textOf = (doi) => {
@@ -318,11 +326,20 @@ async function main() {
   const nextNot = [...notTerms, ...addedNot.map((a) => a.term)];
   const allTerms = nextMust.map((m) => (typeof m === 'string' ? m : m.term));
 
+  // criteria 也要跟着更新：core-any 换成新词表、exclusion 换成新的排除项，
+  // 共现判据原样保留（它们是人给的，机器不擅自改）。
+  const nextCriteria = (draft.criteria ?? []).map((criterion) => {
+    if (criterion.id === 'core-any') return { ...criterion, terms: allTerms.slice(0, 10) };
+    if (criterion.kind === 'absent') return { ...criterion, terms: nextNot.slice(0, 6) };
+    return criterion;
+  });
+
   const next = {
     ...draft,
     version: (draft.version ?? 1) + 1,
     mustHave: nextMust,
     mustNot: nextNot,
+    criteria: nextCriteria,
     decision: { minHits: bestK, calibratedFrom: observations.length },
     checks: (draft.checks ?? []).map((check) => {
       if (check.id === 'core-terms') return { ...check, pattern: allTerms.slice(0, 10).map(escapeRe).join('|') };
@@ -355,38 +372,56 @@ async function main() {
 
   console.log(`\n正在按新判据拉下一批（已看过 ${seen.size} 篇会跳过）……`);
   const pool = allTerms.length ? await fetchPool(allTerms.slice(0, 8), CAP) : [];
+  // 选样本和判样本必须是同一套规则。
+  // 之前这里按「命中几个词」挑，而 try / refine 的判定按 criteria —— 两套规则，
+  // 结果就是「试的时候对得上，拉出来的队列却不对路」。这里统一到 criteria。
   const negRe = nextNot.length ? new RegExp(nextNot.map(escapeRe).join('|'), 'i') : null;
   const fresh = pool.filter((work) => !seen.has(work.doi) && !labeled.some((row) => normalizeDoi(row.doi) === work.doi));
 
-  const scored = fresh.map((work) => {
-    const text = `${work.title} ${work.abstract}`.toLowerCase();
-    const hits = allTerms.filter((t) => text.includes(t)).length;
-    return { ...work, hits, neg: negRe ? negRe.test(text) : false };
-  });
-  const top = Math.max(...scored.map((r) => r.hits), 0);
-  const edgeFrom = Math.max(bestK, top - 3);
+  const scoreByCriteria = (text) => {
+    const results = evaluate(next.criteria ?? [], text);
+    const violated = results.some((r) => r.kind === 'absent' && !r.matched);
+    const coOccur = results.filter((r) => r.kind === 'co-occur');
+    const positives = results.filter((r) => r.kind !== 'absent' && r.matched);
+    const said = coOccur.length ? coOccur.some((r) => r.matched) : positives.length > 0;
 
-  const reranked = scored
-    .filter((r) => r.hits >= bestK)
-    .map((r) => {
-      let score = 0;
-      let why = '';
-      if (r.hits >= edgeFrom && r.neg) { score = 5; why = `命中 ${r.hits}/${allTerms.length}，但同时踩到排除信号`; }
-      else if (r.hits >= edgeFrom && r.hits < top) { score = 4; why = `命中 ${r.hits}/${allTerms.length}，贴着交集边缘`; }
-      else if (r.hits >= top) { score = 3; why = `命中 ${r.hits}/${allTerms.length}——新判据最确定的一批`; }
-      return { ...r, score, why };
+    let score = 0;
+    let why = '与当前判据无关';
+    if (violated && said) { score = 5; why = '判据内部打架：有正向命中，但也踩到排除信号'; }
+    else if (violated) { score = 1; why = '只踩到排除信号'; }
+    else if (said && coOccur.some((r) => r.matched)) { score = 4; why = '共现判据命中——贴着概念边界'; }
+    else if (said && positives.length < (next.criteria ?? []).filter((c) => c.kind !== 'absent').length) { score = 3; why = '只中部分正向判据，贴在边界'; }
+    else if (said) { score = 2; why = '当前判据最确定的一批'; }
+    return { score, why, said, hits: positives.length };
+  };
+
+  const reranked = fresh
+    .map((work) => {
+      const text = `${work.title} ${work.abstract}`;
+      const { score, why, hits } = scoreByCriteria(text);
+      return { ...work, score, why, hits, neg: negRe ? negRe.test(text) : false };
     })
     .filter((r) => r.score > 0)
     .sort((a, b) => (b.score - a.score) || (b.hits - a.hits) || (b.cited - a.cited));
 
-  const csv = ['doi,title,year,cited,why,verdict', ...reranked.map((r) => [r.doi, csvEscape(r.title), r.year ?? '', r.cited ?? '', csvEscape(r.why), ''].join(','))];
-  fs.writeFileSync(path.join(PACK_DIR, `review-queue-v${next.version}.csv`), `${csv.join('\n')}\n`, 'utf8');
+  // 旧队列里没标的，只有「在新判据下仍然命中」的才带过来。
+  // 判据收窄之后，旧的未标条目是按老判据挑的，带过来就是污染。
+  const carried = unlabeled.filter((row) => {
+    const text = textOf(row.doi);
+    if (!text) return false;
+    const results = evaluate(criteria ?? [], text);
+    const violated = results.some((r) => r.kind === 'absent' && !r.matched);
+    if (violated) return false;
+    const coOccur = results.filter((r) => r.kind === 'co-occur');
+    return coOccur.length ? coOccur.some((r) => r.matched) : results.some((r) => r.kind !== 'absent' && r.matched);
+  }).map((row) => ({ ...row, why: `${row.why}（上一轮遗留，新判据下仍命中）`, score: 2 }));
 
-  // 旧队列里还没标的也保留下来（不丢活）
-  if (unlabeled.length) {
-    const carry = ['doi,title,year,cited,why,verdict', ...unlabeled.map((r) => [r.doi, csvEscape(r.title), r.year ?? '', r.cited ?? '', csvEscape(`${r.why}（上一轮遗留）`), ''].join(','))];
-    fs.appendFileSync(path.join(PACK_DIR, `review-queue-v${next.version}.csv`), `${carry.slice(1).join('\n')}\n`, 'utf8');
-  }
+  const merged = [...reranked, ...carried]
+    .sort((a, b) => (b.score - a.score) || ((b.hits ?? 0) - (a.hits ?? 0)))
+    .slice(0, PICK);
+
+  const csv = ['doi,title,year,cited,why,verdict', ...merged.map((r) => [r.doi, csvEscape(r.title), r.year ?? '', r.cited ?? '', csvEscape(r.why), ''].join(','))];
+  fs.writeFileSync(path.join(PACK_DIR, `review-queue-v${next.version}.csv`), `${csv.join('\n')}\n`, 'utf8');
 
   // ── 归档 + 趋势 ───────────────────────────────────────────────────────────
   const record = {
@@ -405,12 +440,12 @@ async function main() {
     minHits: bestK,
     addedMust: addedMust.length,
     addedNot: addedNot.length,
-    nextQueue: reranked.length + unlabeled.length,
+    nextQueue: merged.length,
   };
   const historyPath = path.join(PACK_DIR, 'history.jsonl');
   fs.appendFileSync(historyPath, JSON.stringify(record) + '\n', 'utf8');
 
-  console.log(`  下一轮队列 ${reranked.length + unlabeled.length} 篇（新拉 ${reranked.length} + 上轮遗留 ${unlabeled.length}）→ review-queue-v${next.version}.csv`);
+  console.log(`  下一轮队列 ${merged.length} 篇（新拉 ${reranked.length} 中取 + 上轮遗留 ${carried.length}）→ review-queue-v${next.version}.csv`);
   console.log(`  这批标过的 ${labeled.length} 篇不会再问你。`);
 
   const history = fs.readFileSync(historyPath, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));

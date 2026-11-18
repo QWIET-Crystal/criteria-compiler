@@ -113,6 +113,16 @@ node bench/ledger.mjs --pack cof-h2o2
 
 完整的不许过拟合 / 不许欠拟合规矩见 [docs/fit-guards.md](docs/fit-guards.md)。
 
+改完判据之后，旧队列就过期了——它按上一版挑的。跑一次 `refine` 会按新判据重拉：
+
+```bash
+node bench/refine.mjs --pack my-topic --pick 20
+```
+
+没有标注时它跳过学习、只重拉。实测这一步的差别很大：同一份草案从「数命中词数」换成
+`asymmetric + photosynthesis` 共现判据，重拉出来的队列从一堆无关的 MOF 电荷转移论文，
+变成三篇真正在讲「不对称光催化产 H₂O₂」的论文。
+
 ## 换领域之前：先做一次轴产出体检
 
 多轴召回是本项目唯一一条被数据钉死的结论，但那条结论是在 COF 上测出来的。换领域之前，先确认那个领域的轴是不是真的分得开：
