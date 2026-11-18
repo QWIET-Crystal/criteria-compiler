@@ -239,7 +239,7 @@ function workUrl(search, page, perPage = PER_PAGE) {
     filter: [ `title_and_abstract.search:${search}`, DATE_FILTER ].filter(Boolean).join(','),
     'per-page': String(Math.min(perPage, 100)),
     page: String(page),
-    select: 'doi,title,publication_year,cited_by_count',
+    select: 'doi,title,publication_year,cited_by_count,type',
   });
   if (MAILTO) params.set('mailto', MAILTO);
   if (API_KEY) params.set('api_key', API_KEY);
@@ -266,6 +266,9 @@ async function runQuery(search, pool) {
       return { total, added, error: err.message };
     }
     for (const w of data.results || []) {
+      // peer-review 记录、数据集、paratext 不是文献记录。
+      // 不筛的话它们会进池子，被当成候选，还会把「召回」算得好看一点——那是假的。
+      if (w.type != null && !['article', 'review', 'preprint', 'letter'].includes(String(w.type))) continue;
       const doi = canonicalDoi(normalizeDoi(w.doi || ''));
       const key = doi || `openalex:${String(w.id || '').split('/').pop()}`;
       if (pool.has(key)) continue;
@@ -428,6 +431,7 @@ async function probeSeeds() {
   console.log('─'.repeat(72));
   console.log('（不需要金标：你手上认识的任何一批论文都能当种子）\n');
 
+  const stageUnions = [];
   for (const stage of stages) {
     const union = new Set();
     console.log(`${stage.id}. ${stage.label}`);
@@ -442,17 +446,13 @@ async function probeSeeds() {
       console.log(`${label}${String(hit.length).padStart(3)}/${canonical.length}   ${query.slice(0, 52)}${result.error ? `  ERR ${result.error}` : ''}`);
       if (VERBOSE && hit.length && hit.length <= 6) console.log(`          ↳ ${hit.join('、')}`);
     }
+    stageUnions.push(union);
     console.log(`  ${stage.id} 并集    ${String(union.size).padStart(3)}/${canonical.length}\n`);
   }
 
+  // 别再跑一遍：每阶段已经算过并集了，这里只是把它们合起来。
   const all = new Set();
-  for (const stage of stages) {
-    for (const query of stage.queries) {
-      const pool = new Map();
-      await runQueryAll(query, pool);
-      for (const doi of canonical) if (pool.has(doi)) all.add(doi);
-    }
-  }
+  for (const set of stageUnions) for (const doi of set) all.add(doi);
   const missing = canonical.filter((doi) => !all.has(doi));
   console.log('─'.repeat(72));
   console.log(`全部查询并集：${all.size}/${canonical.length}`);

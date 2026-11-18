@@ -32,11 +32,16 @@ export function escapeRe(term) {
  * 先过滤再拼会拼出「photosynthesis aerobic」这种根本不存在的短语。
  */
 export function termsOf(work) {
-  const raw = `${work.title ?? ''} ${work.abstract ?? ''}`
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
+  // 标题和摘要**分别**切词，再拼成一条词流。
+  // 直接 `title + ' ' + abstract` 会在交界处造出一个根本不存在的双词
+  // （标题末词 + 摘要首词），而双词是按相邻对生成的。
+  const tokens = (text) =>
+    String(text ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+  const raw = [...tokens(work.title), ...tokens(work.abstract)];
   const usable = (w) => w.length >= 4 && w.length <= 30 && !STOP.has(w) && !/^\d+$/.test(w);
 
   const set = new Set();

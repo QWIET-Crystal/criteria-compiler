@@ -19,9 +19,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
-import { evaluate } from './lib/criteria.mjs';
+import { decide as decideRule, evaluate, workText } from './lib/criteria.mjs';
 import { appendHistory, describeDiff, diffSnapshot, isEmptyDiff, lastSnapshot, snapshotOf } from './lib/history.mjs';
-import { make, record, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
+import { make, record as recordProvenance, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -94,7 +94,7 @@ async function loadWorks(dois) {
   const safe = dois.filter((d) => SAFE_DOI.test(d) && !d.includes('..'));
   for (let i = 0; i < safe.length; i += 50) {
     const filter = `doi:${safe.slice(i, i + 50).join('|')}`;
-    const url = `${API}?filter=${encodeURIComponent(filter)}&per-page=50&select=doi,title,publication_year,cited_by_count,abstract_inverted_index`;
+    const url = `${API}?filter=${encodeURIComponent(filter)}&per-page=50&select=doi,title,publication_year,cited_by_count,type,abstract_inverted_index`;
     const data = await api(url);
     for (const work of data?.results ?? []) {
       const doi = normalizeDoi(work.doi);
@@ -111,16 +111,27 @@ async function loadWorks(dois) {
   return found;
 }
 
+// 只保留真正的文献记录。
+//
+// 不筛的话，池子里会混进 peer-review 记录（DOI 长这样：10.1039/d5sc01916h/v1/review2）、
+// dataset、paratext——它们不是论文，却占着名额、还会被当成候选让人去标。
+const USABLE_TYPES = new Set(['article', 'review', 'preprint', 'letter']);
+const usableType = (type) => (type == null ? true : USABLE_TYPES.has(String(type)));
+
 async function fetchPool(terms, cap) {
   const query = `(${terms.map((t) => `"${t}"`).join(' OR ')})`;
-  const base = `${API}?filter=${encodeURIComponent(`title_and_abstract.search:${query}`)}&per-page=100&select=doi,title,publication_year,cited_by_count,abstract_inverted_index`;
+  const base = `${API}?filter=${encodeURIComponent(`title_and_abstract.search:${query}`)}&per-page=100&select=doi,title,publication_year,cited_by_count,type,abstract_inverted_index`;
   const works = [];
+  let failedPages = 0;
   for (let page = 1; page <= Math.ceil(cap / 100); page++) {
     const data = await api(`${base}&page=${page}`);
+    // 取失败 ≠ 没有结果。这两件事必须分开，否则「额度用完」会显示成「没有新论文」。
+    if (!data) { failedPages++; await sleep(400); continue; }
     const results = data?.results ?? [];
     for (const entry of results) {
       const doi = normalizeDoi(entry.doi);
       if (!doi) continue;
+      if (!usableType(entry.type)) continue;   // peer-review / dataset / paratext 不是文献记录
       works.push({
         doi,
         title: entry.title ?? '',
@@ -132,7 +143,7 @@ async function fetchPool(terms, cap) {
     await sleep(200);
     if (results.length < 100) break;
   }
-  return works;
+  return { works, failedPages };
 }
 
 function parseCsv(text) {
@@ -209,7 +220,7 @@ async function main() {
   const works = await loadWorks(queue.map((row) => row.doi));
   const textOf = (doi) => {
     const work = works.get(doi);
-    return work ? `${work.title} ${work.abstract}`.toLowerCase() : '';
+    return work ? workText(work).toLowerCase() : '';
   };
   const partsOf = (doi) => {
     const work = works.get(doi);
@@ -224,14 +235,11 @@ async function main() {
   // 他可以直接编辑 draft.json 里的 criteria，人给概念，机器只做记账。
   const criteria = Array.isArray(draft.criteria) && draft.criteria.length ? draft.criteria : null;
   const guessAt = (doi, k) => terms.filter((t) => textOf(doi).includes(t)).length >= k;
+  // 判定只用 lib 里那一份。这里原来自己写了一遍二值规则，而 try/ledger 是三值，
+  // 同一篇论文两个工具给两个答案——注释还写着「与 try 保持一致」。
   const decideWith = (doi, k) => {
     if (!criteria) return guessAt(doi, k);
-    const results = evaluate(criteria, textOf(doi), partsOf(doi));
-    const exclusion = results.find((r) => r.kind === 'absent');
-    if (exclusion && !exclusion.matched) return false; // 踩到排除信号，直接不算
-    const coOccur = results.filter((r) => r.kind === 'co-occur');
-    // 有共现判据就以共现为准；没有才退回 any。与 bench/try.mjs 保持一致。
-    return coOccur.length ? coOccur.some((r) => r.matched) : results.some((r) => r.kind !== 'absent' && r.matched);
+    return decideRule(criteria, textOf(doi), partsOf(doi)).verdict !== '不算';
   };
 
   // ── 1. 校准松紧 ───────────────────────────────────────────────────────────
@@ -405,38 +413,55 @@ async function main() {
   for (const doi of draft.examples?.negative ?? []) seen.add(normalizeDoi(doi));
 
   console.log(`\n正在按新判据拉下一批（已看过 ${seen.size} 篇会跳过）……`);
-  const pool = allTerms.length ? await fetchPool(allTerms.slice(0, 8), CAP) : [];
+  const pooled = allTerms.length ? await fetchPool(allTerms.slice(0, 8), CAP) : { works: [], failedPages: 0 };
+  const pool = pooled.works;
+  if (!pool.length && pooled.failedPages) {
+    console.error(`\n拉下一批失败（${pooled.failedPages} 页都取不到）。`);
+    console.error('不是「没有新论文」，是请求没成功——额度用完或网络不通。');
+    console.error('已写下的 draft 和 history 不受影响；等能联网再跑一次即可。');
+    process.exit(2);
+  }
   // 选样本和判样本必须是同一套规则。
   // 之前这里按「命中几个词」挑，而 try / refine 的判定按 criteria —— 两套规则，
   // 结果就是「试的时候对得上，拉出来的队列却不对路」。这里统一到 criteria。
   const negRe = nextNot.length ? new RegExp(nextNot.map(escapeRe).join('|'), 'i') : null;
   const fresh = pool.filter((work) => !seen.has(work.doi) && !labeled.some((row) => normalizeDoi(row.doi) === work.doi));
 
-  const scoreByCriteria = (text) => {
-    const results = evaluate(next.criteria ?? [], text);
-    const violated = results.some((r) => r.kind === 'absent' && !r.matched);
-    const coOccur = results.filter((r) => r.kind === 'co-occur');
-    const positives = results.filter((r) => r.kind !== 'absent' && r.matched);
-    const said = coOccur.length ? coOccur.some((r) => r.matched) : positives.length > 0;
+  // 队列按**三档判定**挑，和 try / ledger 用同一套（lib/criteria.decide）。
+  //
+  // 这里原来只认「共现命中」，于是「疑似」全被滤掉——而那些恰恰是最该让人标的：
+  // 工具拿不准，人一眼就能定。旧逻辑会让队列显得「很干净」，代价是绕过全部边界样本。
+  const scoreByCriteria = (text, parts = {}) => {
+    const decided = decideRule(next.criteria ?? [], text, parts);
+    const hits = decided.results.filter((r) => r.kind !== 'absent' && r.matched).length;
 
     let score = 0;
     let why = '与当前判据无关';
-    if (violated && said) { score = 5; why = '判据内部打架：有正向命中，但也踩到排除信号'; }
-    else if (violated) { score = 1; why = '只踩到排除信号'; }
-    else if (said && coOccur.some((r) => r.matched)) { score = 4; why = '共现判据命中——贴着概念边界'; }
-    else if (said && positives.length < (next.criteria ?? []).filter((c) => c.kind !== 'absent').length) { score = 3; why = '只中部分正向判据，贴在边界'; }
-    else if (said) { score = 2; why = '当前判据最确定的一批'; }
-    return { score, why, said, hits: positives.length };
+    if (decided.violated && decided.weak) { score = 5; why = '判据内部打架：有正向命中，但也踩到排除信号'; }
+    else if (decided.violated) { score = 1; why = '只踩到排除信号'; }
+    else if (decided.strong) { score = 4; why = '共现判据命中——贴着概念边界'; }
+    else if (decided.weak) { score = 3; why = '只有泛词命中，没有共现证据——最值得你亲眼看的一批'; }
+    return { score, why, hits };
   };
 
-  const reranked = fresh
-    .map((work) => {
-      const text = `${work.title} ${work.abstract}`;
-      const { score, why, hits } = scoreByCriteria(text);
-      return { ...work, score, why, hits, neg: negRe ? negRe.test(text) : false };
-    })
+  const scored = fresh.map((work) => {
+    const text = workText(work);
+    const { score, why, hits } = scoreByCriteria(text, { title: work.title, abstract: work.abstract });
+    return { ...work, score, why, hits, neg: negRe ? negRe.test(text) : false };
+  });
+  // 排序：先按判定强度，再按判据命中数，**最后按年份新的在前**。
+  //
+  // 原来最后一项是引用数——结果队列被 1961 年的老文章占满。
+  // 文献综述里「新」比「被引多」更要紧，这一点使用者测评第一条就点出来了。
+  const reranked = scored
     .filter((r) => r.score > 0)
-    .sort((a, b) => (b.score - a.score) || (b.hits - a.hits) || (b.cited - a.cited));
+    .sort((a, b) => (b.score - a.score) || (b.hits - a.hits) || ((b.year ?? 0) - (a.year ?? 0)) || (b.cited - a.cited));
+
+  // 让人一眼看出「0 篇」是怎么来的：是没拉到、还是拉到了但判据说都不算。
+  console.log(`  拉到 ${pool.length} 篇｜已看过跳过 ${pool.length - fresh.length} 篇｜命中判据 ${reranked.length} 篇`);
+  if (pool.length && !reranked.length) {
+    console.log('  （拉到了，但没有一篇命中当前判据——这是判据太窄，不是没数据）');
+  }
 
   // 旧队列里没标的，只有「在新判据下仍然命中」的才带过来。
   // 判据收窄之后，旧的未标条目是按老判据挑的，带过来就是污染。
@@ -476,7 +501,7 @@ async function main() {
     addedNot: addedNot.length,
     nextQueue: merged.length,
   };
-  record(PACK_DIR, `review-queue-v${next.version}.csv`, make({
+  recordProvenance(PACK_DIR, `review-queue-v${next.version}.csv`, make({
     tool: 'bench/refine.mjs',
     builtFrom: { want: draft.want ?? null, positives: draft.examples?.positive ?? null, negatives: draft.examples?.negative ?? null },
     filteredBy: { queries: 1, cap: CAP, poolSize: pool.length, dropped: null },

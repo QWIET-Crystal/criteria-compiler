@@ -13,6 +13,23 @@
 
 const SENTENCE_SPLIT = /(?<=[.!?。！？])\s+|[\r\n]+/;
 
+/**
+ * 一篇论文的正文：**标题和摘要之间必须有一个句号**。
+ *
+ * 这不是风格问题。用空格拼的时候，标题没带结尾句号就会和摘要第一句黏成一句，
+ * 于是「标题里的词」和「摘要第一句里的词」被判成「同一句出现」——假共现。
+ * 实测过：同一篇论文，换个拼法结论就反了。
+ *
+ * 所以只留这一个出口，任何地方都不许自己拼。
+ */
+export function workText(work) {
+  const title = String(work?.title ?? '').trim();
+  const abstract = String(work?.abstract ?? '').trim();
+  if (!title) return abstract;
+  if (!abstract) return title;
+  return `${title}. ${abstract}`;
+}
+
 export function splitSentences(text) {
   return String(text ?? '')
     .split(SENTENCE_SPLIT)
@@ -41,7 +58,7 @@ function spansOf(sentence, term, offset) {
 
 /**
  * 求一组判据。返回每一项的命中与否 + 证据片段。
- * criteria: [{ id, kind, terms: string[], note?, window? }]
+ * criteria: [{ id, kind, terms: string[], note?, scope?: 'any'|'title' }]
  */
 export function evaluate(criteria, text, parts = {}) {
   const source = String(text ?? '');
@@ -150,6 +167,38 @@ export function evaluate(criteria, text, parts = {}) {
 }
 
 /**
+ * 判定一篇论文。**规则只写在这里一处。**
+ *
+ * 之前这条规则在 refine / try / ledger 里各写了一份，而且已经不一致：
+ * refine 是二值（共现不中就是「不算」），try 和 ledger 是三值（还有「疑似」）。
+ * 结果是同一篇论文，两个工具给两个答案——而 refine 的注释还写着「与 try 保持一致」。
+ *
+ * 三档的意义（来自真实记录第 33 行，学生原话「半是半不是，不好确定」）：
+ *   算   共现判据命中——两个说法真的撞在一起
+ *   疑似 只有泛词命中，没有共现证据
+ *   不算 都没有，或踩到排除信号
+ *
+ * 二值会替人做一个它没资格做的决定，所以这里必须是三档。
+ */
+export function decide(criteria, text, parts = {}) {
+  const results = evaluate(criteria, text, parts);
+  const violated = results.find((r) => r.kind === 'absent' && !r.matched);
+  const coOccur = results.filter((r) => r.kind === 'co-occur');
+  const positive = results.filter((r) => r.kind !== 'absent' && r.matched);
+
+  const strong = coOccur.some((r) => r.matched);
+  const weak = positive.length > 0;
+
+  let verdict;
+  if (violated) verdict = '不算';
+  else if (strong) verdict = '算';
+  else if (weak) verdict = '疑似';
+  else verdict = '不算';
+
+  return { verdict, results, violated: Boolean(violated), strong, weak, positive };
+}
+
+/**
  * 从正反例里找「共现对」。
  *
  * 一个 (A, B) 要成为判据，必须同时满足：
@@ -162,14 +211,21 @@ export function findCooccurrences(positives, negatives, { minPos = 2, limit = 8 
   const pairs = new Map(); // "a||b" -> count
   const pairSentence = new Map();
 
+  // 生成和求值必须用同一套匹配规则。
+  //
+  // 这里原来用 `sentence.includes(term)`——没有词边界，`synthesis` 会匹配进
+  // `photosynthesis`。于是生成出一条共现判据，而求值器（有词边界）永远不命中它。
+  // 实测过：生成器说「synthesis + aerobic 是共现对」，求值器说「synthesis 整篇都没有」。
+  // 生成出来就死的判据，比没有更糟——它占着位置还让人以为覆盖了。
+  const hits = (sentence, term) => spansOf(sentence, term, 0).length > 0;
+
   for (const work of positives) {
     const seenInThisWork = new Set();
-    for (const sentence of splitSentences(`${work.title ?? ''}. ${work.abstract ?? ''}`)) {
-      const lower = sentence.toLowerCase();
+    for (const sentence of splitSentences(workText(work))) {
       for (const [i, a] of (work._terms ?? []).entries()) {
         for (const b of (work._terms ?? []).slice(i + 1)) {
           if (a === b) continue;
-          if (lower.includes(a) && lower.includes(b)) {
+          if (hits(sentence, a) && hits(sentence, b)) {
             const key = a < b ? `${a}||${b}` : `${b}||${a}`;
             if (!seenInThisWork.has(key)) { seenInThisWork.add(key); pairSentence.set(key, sentence.slice(0, 200)); }
           }
@@ -181,11 +237,10 @@ export function findCooccurrences(positives, negatives, { minPos = 2, limit = 8 
 
   const negativePairs = new Set();
   for (const work of negatives) {
-    for (const sentence of splitSentences(`${work.title ?? ''}. ${work.abstract ?? ''}`)) {
-      const lower = sentence.toLowerCase();
+    for (const sentence of splitSentences(workText(work))) {
       for (const [i, a] of (work._terms ?? []).entries()) {
         for (const b of (work._terms ?? []).slice(i + 1)) {
-          if (lower.includes(a) && lower.includes(b)) negativePairs.add(a < b ? `${a}||${b}` : `${b}||${a}`);
+          if (hits(sentence, a) && hits(sentence, b)) negativePairs.add(a < b ? `${a}||${b}` : `${b}||${a}`);
         }
       }
     }

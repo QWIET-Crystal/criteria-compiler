@@ -2,7 +2,7 @@
 //
 // 用例刻意与领域无关：判据机制不认识任何学科的词，认识的是「同一句里有没有一起出现」。
 
-import { evaluate } from './criteria.mjs';
+import { decide, evaluate, findCooccurrences, workText } from './criteria.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -111,6 +111,62 @@ const TEXT = [
 
   const [wrongScope] = evaluate([{ id: 'x', kind: 'co-occur', terms: ['hydrogen peroxide', 'visible light'] }], text, parts);
   check('作用域 all：跨标题与摘要不算同句', wrongScope.matched === false);
+}
+
+// ── workText：标题与摘要之间必须有句号 ──────────────────────────────────────
+{
+  const work = { title: 'A Study of Coupling', abstract: 'First sentence here. Second one.' };
+  const text = workText(work);
+  check('workText：标题与摘要之间有句号', text.startsWith('A Study of Coupling. '), text);
+
+  // 真实坑：标题没带句号时，空格拼接会和摘要第一句黏成一句，造出假共现
+  const t2 = 'Tailoring Orbital Hybridization for Peroxide Production';
+  const a2 = 'The process is controlled by adsorption.';
+  const glued = evaluate([{ id: 'x', kind: 'co-occur', terms: ['peroxide', 'adsorption'] }], `${t2} ${a2}`);
+  const proper = evaluate([{ id: 'x', kind: 'co-occur', terms: ['peroxide', 'adsorption'] }], workText({ title: t2, abstract: a2 }));
+  check('空格拼接会造出假共现（这是要避免的）', glued[0].matched === true);
+  check('workText 不会：标题与摘要不同句', proper[0].matched === false);
+}
+
+// ── decide：三档，且排除信号优先 ────────────────────────────────────────────
+{
+  const text = 'We couple A with B in one vessel.';
+  const parts = { title: 't', abstract: text };
+
+  const strong = decide([{ id: 'c', kind: 'co-occur', terms: ['couple', 'vessel'] }], text, parts);
+  check('decide：共现命中 → 算', strong.verdict === '算', strong.verdict);
+
+  const weak = decide([{ id: 'a', kind: 'any', terms: ['couple'] }], text, parts);
+  check('decide：只有泛词 → 疑似', weak.verdict === '疑似', weak.verdict);
+
+  const none = decide([{ id: 'a', kind: 'any', terms: ['zzz'] }], text, parts);
+  check('decide：都没有 → 不算', none.verdict === '不算', none.verdict);
+
+  const blocked = decide(
+    [
+      { id: 'c', kind: 'co-occur', terms: ['couple', 'vessel'] },
+      { id: 'e', kind: 'absent', terms: ['vessel'] },
+    ],
+    text,
+    parts,
+  );
+  check('decide：踩到排除信号，即使共现命中也不算', blocked.verdict === '不算', blocked.verdict);
+}
+
+// ── findCooccurrences：不许生成永远不会命中的判据 ─────────────────────────────
+{
+  // synthesis 只以 photosynthesis 的形式出现：生成器若用 includes 会误判成共现
+  const pos = [{ title: 'T', abstract: 'Photosynthesis and aerobic oxidation proceed together.', _terms: ['synthesis', 'aerobic'] }];
+  const pairs = findCooccurrences(pos, [], { minPos: 1, limit: 5 });
+  check('生成器不把 photosynthesis 里的 synthesis 当命中', !pairs.some((p) => p.terms.includes('synthesis')), JSON.stringify(pairs));
+
+  // 生成出来的每一条，求值器都必须认得出——这是生成器与求值器的一致性契约
+  const pos2 = [{ title: 'T', abstract: 'Aerobic oxidation proceeds in water.', _terms: ['aerobic', 'oxidation'] }];
+  const pairs2 = findCooccurrences(pos2, [], { minPos: 1, limit: 5 });
+  const alive = pairs2.every((pair) =>
+    evaluate([{ id: 'x', kind: 'co-occur', terms: pair.terms }], pos2[0].abstract, { title: pos2[0].title, abstract: pos2[0].abstract })[0].matched,
+  );
+  check('生成出来的判据，求值器全都认得出', pairs2.length > 0 && alive, JSON.stringify(pairs2));
 }
 
 console.log(`\n${passed} 通过 / ${failed} 失败`);

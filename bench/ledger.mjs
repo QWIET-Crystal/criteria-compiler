@@ -16,7 +16,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { evaluate } from './lib/criteria.mjs';
+import { decide as decideRule, workText } from './lib/criteria.mjs';
 import { loadWorks, normalizeDoi as normDoi, worksFromCsv } from './lib/io.mjs';
 import { CAUSES, readCauses, summariseCauses, writeCause } from './lib/causes.mjs';
 import { make, record, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
@@ -171,16 +171,12 @@ async function criteriaCheck(criteriaPath, pack, positives) {
   const rows = positives.map((row) => {
     const doi = canonicalDoi(normalizeDoi(row.doi));
     const work = works.get(doi);
-    const text = work ? `${work.title} ${work.abstract}` : '';
+    const text = work ? workText(work) : '';
     if (!text) return { doi, note: row.note ?? '', status: 'no_text', evidence: [], reason: '取不到题录或摘要', cause: causes[doi] ?? null };
 
-    const results = evaluate(criteria, text, { title: work.title, abstract: work.abstract });
-    const violated = results.find((r) => r.kind === 'absent' && !r.matched);
-    const coOccur = results.filter((r) => r.kind === 'co-occur');
-    const positive = results.filter((r) => r.kind !== 'absent' && r.matched);
-    // 与 try.mjs 同一套三档：共现命中=算；只有泛词命中=疑似；都没有=漏。
-    const strong = coOccur.some((r) => r.matched);
-    const weak = positive.length > 0;
+    // 判定只用 lib 里那一份，不在这里重写。
+    const decided = decideRule(criteria, text, { title: work.title, abstract: work.abstract });
+    const { violated, strong, weak } = decided;
     const said = !violated && (strong || weak);
 
     return {
@@ -189,7 +185,7 @@ async function criteriaCheck(criteriaPath, pack, positives) {
       status: !violated && strong ? 'recognized' : !violated && weak ? 'weak' : 'missed',
       cause: causes[doi] ?? null,
       violated: Boolean(violated),
-      evidence: results.filter((r) => r.kind !== 'absent' && r.matched).flatMap((r) => r.evidence.slice(0, 1)),
+      evidence: decided.results.filter((r) => r.kind !== 'absent' && r.matched).flatMap((r) => r.evidence.slice(0, 1)),
       reason: violated ? `踩到排除信号「${violated.evidence[0]?.quote ?? '?'}」` : strong ? '共现判据命中' : weak ? '只有泛词命中，没有共现证据' : '没有任何正向判据命中',
     };
   });
@@ -225,9 +221,11 @@ async function criteriaCheck(criteriaPath, pack, positives) {
   const missed = rows.filter((r) => r.status === 'missed').length;
   const noText = rows.filter((r) => r.status === 'no_text').length;
 
-  // 「取不到文本」不算「没认出」：那是没数据，不是判据说它不算。
-  // 把它算进来会把整组原因的比例冲淡，进而把该给的建议挤掉。
-  const missedRows = rows.filter((r) => r.status !== 'recognized' && r.status !== 'no_text');
+  // 只有**完全没命中**的才需要定原因。
+  // 「弱信号」是「够到了但证据不足」，它已经在上面单独报了，
+  // 再塞进「没认出」会让人以为判据完全看不见它。
+  // 「取不到文本」是没数据，更不是判据的判断。
+  const missedRows = rows.filter((r) => r.status === 'missed');
   const { buckets, advice } = summariseCauses(missedRows);
 
   console.log('');
@@ -247,7 +245,8 @@ async function criteriaCheck(criteriaPath, pack, positives) {
   console.log('小结');
   console.log('─'.repeat(78));
   console.log(`  判据认出 ${recognized}/${positives.length}${noText ? `（${noText} 篇取不到文本）` : ''}`);
-  if (weak) console.log(`  另有 ${weak} 篇只给出弱信号（命中泛词但没有共现证据）——「疑似」，不是「认出」。`);
+  if (weak) console.log(`  疑似（够到但没共现证据）：${weak} 篇`);
+  if (missed) console.log(`  完全没命中：${missed} 篇`);
   // 欠拟合防线：判据认不出已知该算的论文，是最危险的失败——它看起来"很干净"。
   const touched = recognized + weak;
   const checklist = positives.length - noText;

@@ -20,7 +20,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
-import { evaluate, findCooccurrences } from './lib/criteria.mjs';
+import { evaluate, findCooccurrences, workText } from './lib/criteria.mjs';
 import { appendHistory } from './lib/history.mjs';
 import { make, record, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
 
@@ -148,16 +148,27 @@ function negativeMarkers(posWorks, negWorks, limit = 8) {
 }
 
 // ── 拉背景池 ─────────────────────────────────────────────────────────────────
+// 只保留真正的文献记录。
+//
+// 不筛的话，池子里会混进 peer-review 记录（DOI 长这样：10.1039/d5sc01916h/v1/review2）、
+// dataset、paratext——它们不是论文，却占着名额、还会被当成候选让人去标。
+const USABLE_TYPES = new Set(['article', 'review', 'preprint', 'letter']);
+const usableType = (type) => (type == null ? true : USABLE_TYPES.has(String(type)));
+
 async function fetchPool(terms, cap) {
   const query = `(${terms.map((t) => `"${t}"`).join(' OR ')})`;
-  const base = `${API}?filter=${encodeURIComponent(`title_and_abstract.search:${query}`)}&per-page=100&select=doi,title,publication_year,cited_by_count,abstract_inverted_index`;
+  const base = `${API}?filter=${encodeURIComponent(`title_and_abstract.search:${query}`)}&per-page=100&select=doi,title,publication_year,cited_by_count,type,abstract_inverted_index`;
   const works = [];
+  let failedPages = 0;
   for (let page = 1; page <= Math.ceil(cap / 100); page++) {
     const data = await api(`${base}&page=${page}`);
+    // 取失败 ≠ 没有结果。这两件事必须分开，否则「额度用完」会显示成「没有新论文」。
+    if (!data) { failedPages++; await sleep(400); continue; }
     const results = data?.results ?? [];
     for (const entry of results) {
       const doi = normalizeDoi(entry.doi);
       if (!doi) continue;
+      if (!usableType(entry.type)) continue;   // peer-review / dataset / paratext 不是文献记录
       works.push({
         doi,
         title: entry.title ?? '',
@@ -166,10 +177,10 @@ async function fetchPool(terms, cap) {
         abstract: reconstructAbstract(entry.abstract_inverted_index),
       });
     }
-    await sleep(250);
+    await sleep(200);
     if (results.length < 100) break;
   }
-  return works;
+  return { works, failedPages };
 }
 
 // ── 挑「最该由人来标的」那一批 ───────────────────────────────────────────────
@@ -181,7 +192,8 @@ function rankBoundary(works, criteria, known = new Set()) {
   const rows = works
     .filter((work) => !known.has(work.doi))
     .map((work) => {
-      const results = evaluate(criteria, `${work.title} ${work.abstract}`);
+      // 用 workText：标题与摘要之间补句号，否则会黏成一句（见 criteria.workText）。
+      const results = evaluate(criteria, workText(work), { title: work.title, abstract: work.abstract });
       const fired = results.filter((r) => r.matched);
       const co = results.find((r) => r.kind === 'co-occur' && r.matched);
       const anyFired = results.find((r) => r.kind === 'any' && r.matched);
@@ -242,7 +254,13 @@ async function main() {
   if (!candidates.length) fail('没能从正例里提取出任何候选词。补几篇正例，或确认摘要能取到。');
 
   console.log('\n正在拉一个同领域的背景池，用来分辨哪些词只是这个领域的通用词……');
-  const poolWorks = await fetchPool(candidates.slice(0, 8).map((t) => t.term), CAP);
+  const { works: poolWorks, failedPages } = await fetchPool(candidates.slice(0, 8).map((t) => t.term), CAP);
+  if (!poolWorks.length && failedPages) {
+    console.error(`\n拉背景池失败（${failedPages} 页都取不到）。`);
+    console.error('这不是「这个领域没有论文」，是请求没成功：多半是 OpenAlex 免费额度用完（按 IP 共享，UTC 零点重置），或网络不通。');
+    console.error('可以先设 OPENALEX_API_KEY 再跑。现在继续会得到一份基于空背景池的草案——那没有意义。');
+    process.exit(2);
+  }
   const terms = refineAgainstPool(candidates, poolWorks);
   if (!terms.length) fail('所有候选词都在背景池里高频出现，没有一个是区分性的。多半是正例太杂，或者这个领域的说法确实没有共识词。');
 

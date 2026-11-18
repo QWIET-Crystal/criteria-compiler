@@ -109,14 +109,17 @@ export function worksFromCsv(file) {
 }
 
 export function parseCsv(text) {
+  // Excel / PowerShell 导出的 CSV 常带 BOM。不剥掉的话第一列表头会变成 "\uFEFFdoi"，
+  // 于是 row.doi 取不到值——而这一整行会被安静地当成「没有 DOI」，不是报错。
+  const source = String(text ?? '').replace(/^\uFEFF/, '');
   const rows = [];
   let row = [];
   let cur = '';
   let quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
     if (quoted) {
-      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else quoted = false; }
+      if (c === '"') { if (source[i + 1] === '"') { cur += '"'; i++; } else quoted = false; }
       else cur += c;
     } else if (c === '"') quoted = true;
     else if (c === ',') { row.push(cur); cur = ''; }

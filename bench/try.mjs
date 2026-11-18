@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { evaluate } from './lib/criteria.mjs';
+import { decide as decideRule, workText } from './lib/criteria.mjs';
 import { labelOf, loadWorks, normalizeDoi, readDraft, readQueue, ROOT, worksFromCsv } from './lib/io.mjs';
 import { describeDiff } from './lib/history.mjs';
 
@@ -76,27 +76,9 @@ if (!criteria.length) {
 }
 
 /** 判定规则与 refine.mjs 保持一致：踩到排除信号直接不算；否则至少两条正向判据同时中。 */
+// 判定规则在 lib/criteria.mjs 里只有一份（decide），这里不再重写。
 function decide(text, parts = {}) {
-  const results = evaluate(criteria, text, parts);
-  const exclusion = results.find((r) => r.kind === 'absent');
-  const violated = exclusion && !exclusion.matched;
-  const positive = results.filter((r) => r.kind !== 'absent' && r.matched);
-  const coOccur = results.filter((r) => r.kind === 'co-occur');
-  // 三档，不是二值。
-  //
-  // 二值判定会把两类完全不同的论文压成同一个「不算」：
-  //   · 只有泛词命中（可能是、也可能只是同一个领域）
-  //   · 共现撞上了（这是真的撞上了）
-  // 真实记录里学姐就说过「半是半不是，不好确定」——那个状态必须存在，
-  // 否则工具会替人做一个它没资格做的决定。
-  const strong = coOccur.length ? coOccur.some((r) => r.matched) : false;
-  const weak = positive.length > 0;
-  let verdict;
-  if (violated) verdict = '不算';
-  else if (strong) verdict = '算';
-  else if (weak) verdict = '疑似';
-  else verdict = '不算';
-  return { verdict, results, violated, positive };
+  return decideRule(criteria, text, parts);
 }
 
 async function main() {
@@ -105,9 +87,10 @@ async function main() {
   const worksPath = argValue('--works', '');
   const works = worksPath ? worksFromCsv(worksPath) : await loadWorks(rows.map((row) => row.doi));
   const workOf = (doi) => works.get(normalizeDoi(doi));
+  // 标题与摘要之间必须有句号，否则会黏成一句、产生假共现（见 criteria.workText）。
   const textOf = (doi) => {
     const work = workOf(doi);
-    return work ? `${work.title} ${work.abstract}` : '';
+    return work ? workText(work) : '';
   };
   // 作用域判据（比如「只在标题里找共现」）需要原文的两段分开传。
   const partsOf = (doi) => {
