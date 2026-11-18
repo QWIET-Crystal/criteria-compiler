@@ -214,9 +214,21 @@ async function api(url, tries = 3) {
   throw lastErr instanceof Error ? lastErr : new Error('request failed');
 }
 
+// 时间窗口。
+//
+// 一位使用者提的第一条意见就是它：「检索语句里放不进日期，『近三年』只能检索完再筛」。
+// 而文献综述里「新」几乎排在第一位。所以日期必须进 filter，不是事后处理。
+const DATE_WINDOW = PACK.dateWindow ?? null;
+const DATE_FILTER = DATE_WINDOW
+  ? [
+      DATE_WINDOW.since ? `from_publication_date:${DATE_WINDOW.since}` : null,
+      DATE_WINDOW.until ? `to_publication_date:${DATE_WINDOW.until}` : null,
+    ].filter(Boolean).join(',')
+  : '';
+
 function workUrl(search, page, perPage = PER_PAGE) {
   const params = new URLSearchParams({
-    filter: `title_and_abstract.search:${search}`,
+    filter: [ `title_and_abstract.search:${search}`, DATE_FILTER ].filter(Boolean).join(','),
     'per-page': String(Math.min(perPage, 100)),
     page: String(page),
     select: 'doi,title,publication_year,cited_by_count',
