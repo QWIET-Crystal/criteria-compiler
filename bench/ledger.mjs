@@ -17,7 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { evaluate } from './lib/criteria.mjs';
-import { loadWorks } from './lib/io.mjs';
+import { loadWorks, worksFromCsv } from './lib/io.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -137,7 +137,8 @@ async function criteriaCheck(criteriaPath, pack, positives) {
   for (const item of criteria) console.log(`  ${item.id}(${item.kind})  ${(item.terms ?? []).join('、')}`);
   console.log(`在 ${positives.length} 篇已知阳性上跑（这些是人工判定为「该算」的）：`);
 
-  const works = await loadWorks(positives.map((row) => row.doi));
+  const worksPath = argValue('--works', '');
+  const works = worksPath ? worksFromCsv(worksPath) : await loadWorks(positives.map((row) => row.doi));
   const rows = positives.map((row) => {
     const doi = canonicalDoi(normalizeDoi(row.doi));
     const work = works.get(doi);
@@ -147,17 +148,19 @@ async function criteriaCheck(criteriaPath, pack, positives) {
     const results = evaluate(criteria, text);
     const violated = results.find((r) => r.kind === 'absent' && !r.matched);
     const coOccur = results.filter((r) => r.kind === 'co-occur');
-    const said = coOccur.length
-      ? coOccur.some((r) => r.matched)
-      : results.some((r) => r.kind !== 'absent' && r.matched);
+    const positive = results.filter((r) => r.kind !== 'absent' && r.matched);
+    // 与 try.mjs 同一套三档：共现命中=算；只有泛词命中=疑似；都没有=漏。
+    const strong = coOccur.some((r) => r.matched);
+    const weak = positive.length > 0;
+    const said = !violated && (strong || weak);
 
     return {
       doi,
       note: row.note ?? '',
-      status: said && !violated ? 'recognized' : 'missed',
+      status: !violated && strong ? 'recognized' : !violated && weak ? 'weak' : 'missed',
       violated: Boolean(violated),
       evidence: results.filter((r) => r.kind !== 'absent' && r.matched).flatMap((r) => r.evidence.slice(0, 1)),
-      reason: violated ? `踩到排除信号「${violated.evidence[0]?.quote ?? '?'}」` : said ? '判据说算' : coOccur.length ? '共现判据没命中' : '没有任何正向判据命中',
+      reason: violated ? `踩到排除信号「${violated.evidence[0]?.quote ?? '?'}」` : strong ? '共现判据命中' : weak ? '只有泛词命中，没有共现证据' : '没有任何正向判据命中',
     };
   });
 
@@ -186,6 +189,7 @@ async function criteriaCheck(criteriaPath, pack, positives) {
   }
 
   const recognized = rows.filter((r) => r.status === 'recognized').length;
+  const weak = rows.filter((r) => r.status === 'weak').length;
   const missed = rows.filter((r) => r.status === 'missed').length;
   const noText = rows.filter((r) => r.status === 'no_text').length;
 
@@ -193,12 +197,18 @@ async function criteriaCheck(criteriaPath, pack, positives) {
   console.log('小结');
   console.log('─'.repeat(78));
   console.log(`  判据认出 ${recognized}/${positives.length}${noText ? `（${noText} 篇取不到文本）` : ''}`);
+  if (weak) console.log(`  另有 ${weak} 篇只给出弱信号（命中泛词但没有共现证据）——「疑似」，不是「认出」。`);
   // 欠拟合防线：判据认不出已知该算的论文，是最危险的失败——它看起来"很干净"。
-  if (recognized < positives.length * 0.8) {
-    console.log(`  ❌ 认得太少。判据可能太窄（欠拟合）——它把该算的论文判成了不算。`);
+  const touched = recognized + weak;
+  const checklist = positives.length - noText;
+  if (touched < checklist * 0.8) {
+    console.log('  ❌ 够不到。判据可能太窄（欠拟合）——它把该算的论文判成了不算。');
     console.log('     这正是过拟合的反面，也一样难发现：错得很安静。');
+  } else if (weak > recognized) {
+    console.log(`  ⚠️ 够到了（${touched}/${checklist}），但多数是弱信号：只有 ${recognized} 篇有共现证据。`);
+    console.log('     说明泛词把范围兜住了，真正的判据还太少。加共现比加词管用。');
   } else if (missed) {
-    console.log(`  ⚠️ 漏认 ${missed} 篇。看一眼上面每条的原因，判断是判据太窄，还是这几篇确实特殊。`);
+    console.log(`  ⚠️ 漏 ${missed} 篇。看一眼上面每条的原因，判断是判据太窄，还是这几篇确实特殊。`);
   } else {
     console.log('  ✅ 全部认出。但这只说明它没把已知的丢掉；会不会乱认「不算」的，要另测。');
   }

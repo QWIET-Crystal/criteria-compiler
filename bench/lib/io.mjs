@@ -84,6 +84,30 @@ export async function loadWorks(dois) {
   return found;
 }
 
+/**
+ * 从本地 CSV 读题录（列：doi,abstract[,title]）。
+ *
+ * 存在的理由有两个，都很实际：
+ *   1. OpenAlex 免费额度按 IP 共享，用完就只能等 UTC 零点——工具不该因此变成哑巴；
+ *   2. 结论要可复现：同一份题录快照跑出来的结果，跟今天网速和额度无关。
+ */
+export function worksFromCsv(file) {
+  const rows = parseCsv(fs.readFileSync(path.resolve(file), 'utf8'));
+  const found = new Map();
+  for (const row of rows) {
+    const doi = normalizeDoi(row.doi);
+    if (!doi) continue;
+    found.set(doi, {
+      doi,
+      title: row.title ?? '',
+      year: row.year ? Number(row.year) : null,
+      cited: row.cited ? Number(row.cited) : 0,
+      abstract: row.abstract ?? '',
+    });
+  }
+  return found;
+}
+
 export function parseCsv(text) {
   const rows = [];
   let row = [];

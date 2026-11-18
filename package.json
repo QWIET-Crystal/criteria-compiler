@@ -20,7 +20,8 @@
     "typecheck": "tsc -b packages/core && pnpm -r typecheck",
     "refine": "node bench/refine.mjs",
     "ledger": "node bench/ledger.mjs",
-    "try": "node bench/try.mjs"
+    "try": "node bench/try.mjs",
+    "why": "node bench/why.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
