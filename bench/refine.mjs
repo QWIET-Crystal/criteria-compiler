@@ -210,6 +210,10 @@ async function main() {
     const work = works.get(doi);
     return work ? `${work.title} ${work.abstract}`.toLowerCase() : '';
   };
+  const partsOf = (doi) => {
+    const work = works.get(doi);
+    return work ? { title: work.title, abstract: work.abstract } : {};
+  };
 
   // 判定规则先定义，后面两处（留一检验、本轮分桶）都要用它。
   //
@@ -221,7 +225,7 @@ async function main() {
   const guessAt = (doi, k) => terms.filter((t) => textOf(doi).includes(t)).length >= k;
   const decideWith = (doi, k) => {
     if (!criteria) return guessAt(doi, k);
-    const results = evaluate(criteria, textOf(doi));
+    const results = evaluate(criteria, textOf(doi), partsOf(doi));
     const exclusion = results.find((r) => r.kind === 'absent');
     if (exclusion && !exclusion.matched) return false; // 踩到排除信号，直接不算
     const coOccur = results.filter((r) => r.kind === 'co-occur');

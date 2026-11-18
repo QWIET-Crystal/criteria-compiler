@@ -90,5 +90,28 @@ const TEXT = [
   check('空判据：说明为什么', Boolean(results[0].reason));
 }
 
+// ── 词边界：不能把 photosynthesis 里的 synthesis 算进去 ──────────────────────
+{
+  const text = 'Photosynthesis converts light into chemical energy.';
+  const [hit] = evaluate([{ id: 'x', kind: 'any', terms: ['synthesis'] }], text);
+  check('词边界：synthesis 不匹配 photosynthesis', hit.matched === false, JSON.stringify(hit.evidence));
+  const [ok] = evaluate([{ id: 'x', kind: 'any', terms: ['photosynthesis'] }], text);
+  check('词边界：完整词仍然匹配', ok.matched === true);
+}
+
+// ── 作用域：只在标题里找 ────────────────────────────────────────────────────
+{
+  const title = 'Hydrogen peroxide production and organic synthesis on carbon dots';
+  const abstract = 'The catalyst converts oxygen under visible light with high efficiency.';
+  const text = `${title}. ${abstract}`;
+  const parts = { title, abstract };
+
+  const [titleScoped] = evaluate([{ id: 'x', kind: 'co-occur', scope: 'title', terms: ['hydrogen peroxide', 'organic synthesis'] }], text, parts);
+  check('作用域 title：标题里同句命中', titleScoped.matched === true);
+
+  const [wrongScope] = evaluate([{ id: 'x', kind: 'co-occur', terms: ['hydrogen peroxide', 'visible light'] }], text, parts);
+  check('作用域 all：跨标题与摘要不算同句', wrongScope.matched === false);
+}
+
 console.log(`\n${passed} 通过 / ${failed} 失败`);
 process.exit(failed ? 1 : 0);

@@ -76,8 +76,8 @@ if (!criteria.length) {
 }
 
 /** 判定规则与 refine.mjs 保持一致：踩到排除信号直接不算；否则至少两条正向判据同时中。 */
-function decide(text) {
-  const results = evaluate(criteria, text);
+function decide(text, parts = {}) {
+  const results = evaluate(criteria, text, parts);
   const exclusion = results.find((r) => r.kind === 'absent');
   const violated = exclusion && !exclusion.matched;
   const positive = results.filter((r) => r.kind !== 'absent' && r.matched);
@@ -104,9 +104,15 @@ async function main() {
   // 有 --works 就用本地题录，完全离线、结果可复现。
   const worksPath = argValue('--works', '');
   const works = worksPath ? worksFromCsv(worksPath) : await loadWorks(rows.map((row) => row.doi));
+  const workOf = (doi) => works.get(normalizeDoi(doi));
   const textOf = (doi) => {
-    const work = works.get(normalizeDoi(doi));
+    const work = workOf(doi);
     return work ? `${work.title} ${work.abstract}` : '';
+  };
+  // 作用域判据（比如「只在标题里找共现」）需要原文的两段分开传。
+  const partsOf = (doi) => {
+    const work = workOf(doi);
+    return work ? { title: work.title, abstract: work.abstract } : {};
   };
 
   // 取不到题录时**绝不能安静地继续**：判据一条都不会命中，输出会变成
@@ -141,7 +147,7 @@ async function main() {
     for (const row of labeled) {
       const label = labelOf(row);
       if (label === 1) continue;
-      const decided = decide(textOf(row.doi));
+      const decided = decide(textOf(row.doi), partsOf(row.doi));
       const said = label === 2;
 
       // 正常判据说算 = 不算（缺判据）
@@ -193,7 +199,7 @@ async function main() {
   if (EXPLAIN) {
     const groups = new Map();
     for (const row of rows) {
-      const decided = decide(textOf(row.doi));
+      const decided = decide(textOf(row.doi), partsOf(row.doi));
       const fired = decided.results
         .filter((r) => r.kind !== 'absent' && r.matched)
         .map((r) => r.id)
@@ -231,7 +237,7 @@ async function main() {
     const tally = { 算: 0, 不算: 0 };
     const positives = [];
     for (const row of unlabeled) {
-      const decided = decide(textOf(row.doi));
+      const decided = decide(textOf(row.doi), partsOf(row.doi));
       tally[decided.verdict]++;
       if (decided.verdict === '算') positives.push({ row, decided });
     }

@@ -145,7 +145,7 @@ async function criteriaCheck(criteriaPath, pack, positives) {
     const text = work ? `${work.title} ${work.abstract}` : '';
     if (!text) return { doi, note: row.note ?? '', status: 'no_text', evidence: [], reason: '取不到题录或摘要' };
 
-    const results = evaluate(criteria, text);
+    const results = evaluate(criteria, text, { title: work.title, abstract: work.abstract });
     const violated = results.find((r) => r.kind === 'absent' && !r.matched);
     const coOccur = results.filter((r) => r.kind === 'co-occur');
     const positive = results.filter((r) => r.kind !== 'absent' && r.matched);
@@ -207,6 +207,9 @@ async function criteriaCheck(criteriaPath, pack, positives) {
   } else if (weak > recognized) {
     console.log(`  ⚠️ 够到了（${touched}/${checklist}），但多数是弱信号：只有 ${recognized} 篇有共现证据。`);
     console.log('     说明泛词把范围兜住了，真正的判据还太少。加共现比加词管用。');
+  } else if (weak) {
+    console.log(`  ◐ 够到了（${touched}/${checklist}）：${recognized} 篇有共现证据，${weak} 篇只是弱信号。`);
+    console.log('     弱信号那几篇建议逐条看原因——有的是判据缺一条，有的是数据本身有问题。');
   } else if (missed) {
     console.log(`  ⚠️ 漏 ${missed} 篇。看一眼上面每条的原因，判断是判据太窄，还是这几篇确实特殊。`);
   } else {
