@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -122,82 +123,6 @@ async function loadWorks(dois) {
 }
 
 // ── 从例子里长出词 ───────────────────────────────────────────────────────────
-const STOP = new Set(`a an the and or of for in on with by to from at as is are was were be been being
-this that these those we our their its it they them us use used using based via into than then
-herein study results show shows shown report reported present presents new high low two three
-one both such can may also more most less very between among during within without under over
-however moreover furthermore thus therefore which where while when what who whom not no non
-abstract introduction conclusion method methods approach approaches paper work works figure figures
-table tables data result analysis system systems model models performance effect effects
-achieving achieve achieved exceeded exceeding notably notably promising efficient efficiency
-significantly significantly enhanced improve improved improving strategy strategies facile
-respectively thereby thereby toward towards role roles insight insights design designs
-recent recent novel excellent superior remarkable effective successfully easily first time
-due owing attributed enabled enables enable allow allows allowing provide provides provided
-obtained obtain obtaining observed observe shows revealed reveals reveal found find
-compared comparison respectively relatively highly greatly largely mainly primarily`.split(/\s+/));
-
-/** 词与相邻双词。双词必须是**原文相邻**的两个词——先过滤再拼会拼出「photosynthesis aerobic」这种怪东西。 */
-function termsOf(work) {
-  const raw = `${work.title ?? ''} ${work.abstract ?? ''}`
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-  const usable = (w) => w.length >= 4 && w.length <= 30 && !STOP.has(w) && !/^\d+$/.test(w);
-
-  const set = new Set();
-  for (const word of raw) if (usable(word)) set.add(word);
-  for (let i = 0; i + 1 < raw.length; i++) {
-    const [a, b] = [raw[i], raw[i + 1]];
-    if (!usable(a) || !usable(b)) continue;
-    const bigram = `${a} ${b}`;
-    if (bigram.length <= 40) set.add(bigram);
-  }
-  return set;
-}
-
-/** 正例里常见、反例里绝迹的词 —— 第一层线索。先多取，后面再用池内词频过滤。 */
-function distinctiveTerms(posWorks, negWorks, limit = 40) {
-  const counter = new Map();
-  for (const work of posWorks) for (const term of termsOf(work)) counter.set(term, (counter.get(term) ?? 0) + 1);
-  const negHas = new Set();
-  for (const work of negWorks) for (const term of termsOf(work)) negHas.add(term);
-
-  return [...counter.entries()]
-    .filter(([term, count]) => count >= Math.min(2, posWorks.length) && !negHas.has(term))
-    .sort((a, b) => (b[1] - a[1]) || (b[0].split(' ').length - a[0].split(' ').length) || b[0].length - a[0].length)
-    .slice(0, limit)
-    .map(([term, count]) => ({ term, count }));
-}
-
-/**
- * 用同领域的池子做背景，把「通用词」筛掉。
- *
- * 只用 3 篇正例 + 2 篇反例，「photocatalysts」「electron」这种词当然满足
- * 「正例里有、反例里没有」——因为它们在这个领域里到处都有。要判断一个词是不是
- * *区分性* 的，缺的从来不是正例，是**背景分布**。这里拿池子自己当背景。
- */
-function refineTerms(candidates, poolWorks, keep = 14) {
-  const poolSize = poolWorks.length || 1;
-  const df = new Map();
-  for (const work of poolWorks) {
-    for (const term of termsOf(work)) df.set(term, (df.get(term) ?? 0) + 1);
-  }
-  const scored = candidates.map((c) => ({ ...c, df: (df.get(c.term) ?? 0) / poolSize }));
-
-  // 阈值自适应：先按 15% 卡，太严就放宽到 30%，避免一个都不剩。
-  for (const maxDf of [0.15, 0.3]) {
-    const kept = scored
-      .filter((c) => c.df <= maxDf)
-      .sort((a, b) => (b.count - a.count) || (a.df - b.df) || b.term.length - a.term.length)
-      .slice(0, keep);
-    if (kept.length >= Math.min(5, candidates.length)) return kept;
-  }
-  return scored.slice(0, keep);
-}
-
-/** 反例里有、正例里没有的词 —— 可能是排除信号，也可能只是噪音，交给用户判。 */
 function negativeMarkers(posWorks, negWorks, limit = 8) {
   if (!negWorks.length) return [];
   const counter = new Map();
@@ -239,7 +164,6 @@ async function fetchPool(terms, cap) {
 // ── 挑「最该由人来标的」那一批 ───────────────────────────────────────────────
 // 不用模型。判据是：**草案自己拿不准的论文最值钱**。
 // 两个检查意见相反 → 最能教我们东西；只中一半区分词 → 贴在边界上。
-const escapeRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function rankBoundary(works, terms, negMarkers, known = new Set()) {
   const negRe = negMarkers.length ? new RegExp(negMarkers.map((t) => escapeRe(t.term)).join('|'), 'i') : null;
@@ -293,12 +217,14 @@ async function main() {
   const skipped = POS.filter((d) => !works.has(d));
   if (skipped.length) console.log(`\n⚠️ 这 ${skipped.length} 篇没取到题录，已跳过：${skipped.join('、')}`);
 
-  const candidates = distinctiveTerms(posWorks, negWorks);
+  const negHas = new Set();
+  for (const work of negWorks) for (const term of termsOf(work)) negHas.add(term);
+  const candidates = candidateTerms(posWorks, { exclude: negHas });
   if (!candidates.length) fail('没能从正例里提取出任何候选词。补几篇正例，或确认摘要能取到。');
 
   console.log('\n正在拉一个同领域的背景池，用来分辨哪些词只是这个领域的通用词……');
   const poolWorks = await fetchPool(candidates.slice(0, 8).map((t) => t.term), CAP);
-  const terms = refineTerms(candidates, poolWorks);
+  const terms = refineAgainstPool(candidates, poolWorks);
   if (!terms.length) fail('所有候选词都在背景池里高频出现，没有一个是区分性的。多半是正例太杂，或者这个领域的说法确实没有共识词。');
 
   const dropped = candidates.filter((c) => !terms.some((t) => t.term === c.term));
