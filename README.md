@@ -123,6 +123,21 @@ node bench/refine.mjs --pack my-topic --pick 20
 `asymmetric + photosynthesis` 共现判据，重拉出来的队列从一堆无关的 MOF 电荷转移论文，
 变成三篇真正在讲「不对称光催化产 H₂O₂」的论文。
 
+## 认不出来的原因分三类
+
+```bash
+node bench/ledger.mjs --pack cof-h2o2 --cause <doi> <criterion|data|out_of_scope> --note "为什么"
+```
+
+| 原因 | 该做什么 |
+|---|---|
+| `criterion`（判据缺一条） | 改判据——**唯一**值得动判据的一类 |
+| `data`（化学式空格、缺摘要） | 先修数据，改判据没用 |
+| `out_of_scope`（摘要里没这个概念） | 加判据也救不回来 |
+
+判据账会按原因分组，并在多数某一类时直接说现在该做什么。原因存 `causes.json`，
+**不进 gold.csv**——原因属于分析过程，不属于金标。
+
 ## 换领域之前：先做一次轴产出体检
 
 多轴召回是本项目唯一一条被数据钉死的结论，但那条结论是在 COF 上测出来的。换领域之前，先确认那个领域的轴是不是真的分得开：

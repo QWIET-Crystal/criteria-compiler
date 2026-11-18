@@ -17,7 +17,8 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { evaluate } from './lib/criteria.mjs';
-import { loadWorks, worksFromCsv } from './lib/io.mjs';
+import { loadWorks, normalizeDoi as normDoi, worksFromCsv } from './lib/io.mjs';
+import { CAUSES, readCauses, summariseCauses, writeCause } from './lib/causes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -126,6 +127,32 @@ async function hitsOf(query) {
  *
  * 判定规则与 bench/try.mjs、bench/refine.mjs 完全一致。
  */
+/**
+ * --cause <doi> <cause> [--note "为什么"]：人工给一条漏检定原因。
+ * 只认三类（见 lib/causes.mjs），因为只有三类，多一类就会变成新的垃圾桶。
+ */
+function recordCause(PACK_DIR, pack, positives) {
+  const at = argv.indexOf('--cause');
+  const doi = argv[at + 1];
+  const cause = argv[at + 2];
+  if (!doi || !cause) fail('用法：--cause <doi> <criterion|data|out_of_scope> [--note "为什么"]');
+  if (!CAUSES[cause]) fail(`未知原因 "${cause}"。只能是：${Object.keys(CAUSES).join(' / ')}`);
+
+  const known = positives.some((row) => normDoi(row.doi) === normDoi(doi));
+  if (!known) fail(`${doi} 不在这份金集的阳性里。漏检原因只对阳性有意义。`);
+
+  const all = writeCause(PACK_DIR, doi, cause, argValue('--note', ''));
+  const entry = all[normDoi(doi)];
+  console.log(`\n记下了 · ${pack.id}`);
+  console.log('─'.repeat(78));
+  console.log(`  ${doi}`);
+  console.log(`  原因：${CAUSES[cause].label}`);
+  console.log(`  含义：${CAUSES[cause].hint}`);
+  if (entry.note) console.log(`  备注：${entry.note}`);
+  console.log(`\n  存在 ${path.relative(ROOT, path.join(PACK_DIR, 'causes.json'))}，不进 gold.csv——`);
+  console.log('  原因属于分析过程，不属于金标。');
+}
+
 async function criteriaCheck(criteriaPath, pack, positives) {
   const draft = JSON.parse(fs.readFileSync(path.resolve(criteriaPath), 'utf8'));
   const criteria = draft.criteria ?? [];
@@ -139,11 +166,12 @@ async function criteriaCheck(criteriaPath, pack, positives) {
 
   const worksPath = argValue('--works', '');
   const works = worksPath ? worksFromCsv(worksPath) : await loadWorks(positives.map((row) => row.doi));
+  const causes = readCauses(PACK_DIR);
   const rows = positives.map((row) => {
     const doi = canonicalDoi(normalizeDoi(row.doi));
     const work = works.get(doi);
     const text = work ? `${work.title} ${work.abstract}` : '';
-    if (!text) return { doi, note: row.note ?? '', status: 'no_text', evidence: [], reason: '取不到题录或摘要' };
+    if (!text) return { doi, note: row.note ?? '', status: 'no_text', evidence: [], reason: '取不到题录或摘要', cause: causes[doi] ?? null };
 
     const results = evaluate(criteria, text, { title: work.title, abstract: work.abstract });
     const violated = results.find((r) => r.kind === 'absent' && !r.matched);
@@ -158,6 +186,7 @@ async function criteriaCheck(criteriaPath, pack, positives) {
       doi,
       note: row.note ?? '',
       status: !violated && strong ? 'recognized' : !violated && weak ? 'weak' : 'missed',
+      cause: causes[doi] ?? null,
       violated: Boolean(violated),
       evidence: results.filter((r) => r.kind !== 'absent' && r.matched).flatMap((r) => r.evidence.slice(0, 1)),
       reason: violated ? `踩到排除信号「${violated.evidence[0]?.quote ?? '?'}」` : strong ? '共现判据命中' : weak ? '只有泛词命中，没有共现证据' : '没有任何正向判据命中',
@@ -184,6 +213,8 @@ async function criteriaCheck(criteriaPath, pack, positives) {
       console.log(`      认出来了：${quotes || row.reason}`);
     } else {
       console.log(`      ${row.reason}`);
+      if (row.cause) console.log(`      已定原因：${CAUSES[row.cause.cause]?.label ?? row.cause.cause}${row.cause.note ? `——${row.cause.note}` : ''}`);
+      else console.log(`      原因未定：跑 --cause ${row.doi} <criterion|data|out_of_scope>`);
       if (row.note) console.log(`      （人工备注：${row.note}）`);
     }
   }
@@ -193,7 +224,25 @@ async function criteriaCheck(criteriaPath, pack, positives) {
   const missed = rows.filter((r) => r.status === 'missed').length;
   const noText = rows.filter((r) => r.status === 'no_text').length;
 
+  // 「取不到文本」不算「没认出」：那是没数据，不是判据说它不算。
+  // 把它算进来会把整组原因的比例冲淡，进而把该给的建议挤掉。
+  const missedRows = rows.filter((r) => r.status !== 'recognized' && r.status !== 'no_text');
+  const { buckets, advice } = summariseCauses(missedRows);
+
   console.log('');
+  if (missedRows.length) {
+    console.log('没认出（按原因分）');
+    console.log('─'.repeat(78));
+    for (const key of ['criterion', 'data', 'out_of_scope', 'unknown']) {
+      const list = buckets[key] ?? [];
+      if (!list.length) continue;
+      const label = key === 'unknown' ? '原因未定' : CAUSES[key].label;
+      console.log(`  ${label}：${list.length} 篇  ${list.map((r) => r.doi).join('、')}`);
+      if (key !== 'unknown') console.log(`     → ${CAUSES[key].hint}`);
+    }
+    console.log('');
+  }
+
   console.log('小结');
   console.log('─'.repeat(78));
   console.log(`  判据认出 ${recognized}/${positives.length}${noText ? `（${noText} 篇取不到文本）` : ''}`);
@@ -215,6 +264,19 @@ async function criteriaCheck(criteriaPath, pack, positives) {
   } else {
     console.log('  ✅ 全部认出。但这只说明它没把已知的丢掉；会不会乱认「不算」的，要另测。');
   }
+
+  // 三类原因指向三种完全不同的动作。占比最高的那类，就是现在该做的事。
+  if (advice) {
+    console.log('');
+    if (advice === 'criterion') {
+      console.log('  → 多数漏检是「判据缺一条」：该动 criteria。');
+    } else if (advice === 'data') {
+      console.log('  → 多数漏检是「数据要清洗」：现在改判据是白改，先去修化学式空格/缺摘要。');
+    } else if (advice === 'out_of_scope') {
+      console.log('  → 多数漏检是「概念不在摘要里」：加判据也救不回来，该考虑金标本身是否成立，');
+      console.log('     或者承认「只看摘要」这条路的边界在哪里。');
+    }
+  }
 }
 
 async function main() {
@@ -229,6 +291,12 @@ async function main() {
   if (!positives.length) fail('金集里没有阳性，账本无从记起。');
 
   // 给了 --criteria 就只做判据账（判据认不认得出已知该算的），不重放检索查询。
+  // 先处理 --cause：它只写原因文件，不跑判据账。
+  if (argv.includes('--cause')) {
+    recordCause(PACK_DIR, pack, positives);
+    return;
+  }
+
   const criteriaPath = argValue('--criteria', '');
   if (criteriaPath) {
     await criteriaCheck(criteriaPath, pack, positives);
