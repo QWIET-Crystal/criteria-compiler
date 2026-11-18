@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { evaluate } from './lib/criteria.mjs';
 import { loadWorks, normalizeDoi as normDoi, worksFromCsv } from './lib/io.mjs';
 import { CAUSES, readCauses, summariseCauses, writeCause } from './lib/causes.mjs';
+import { make, record, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -423,6 +424,16 @@ async function main() {
   };
   const out = path.join(PACK_DIR, 'ledger.json');
   fs.writeFileSync(out, JSON.stringify(ledger, null, 2) + '\n', 'utf8');
+  record(PACK_DIR, 'ledger.json', make({
+    tool: 'bench/ledger.mjs',
+    builtFrom: { positives: positives.map((row) => row.doi) },
+    filteredBy: { queries: sources.length, cap: CAP },
+    notIncluded: STANDARD_NOT_INCLUDED,
+    limits: [
+      '这是下界，不是覆盖率：分母只有手上这几篇已知文献',
+      'DOI 兜底直查拿到的，不算检索能力',
+    ],
+  }));
 
   console.log('\n小结');
   console.log('─'.repeat(78));

@@ -11,6 +11,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import fs from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
 import {
   collect,
@@ -62,8 +63,19 @@ server.tool(
     dimensions: z.array(z.string()).optional().describe('Dimension ids to query. Omit for all axes of the pack.'),
     extraQueries: z.array(z.string()).optional().describe('ExtraQuery ids to add. Omit for none.'),
     cap: z.number().int().min(100).max(2000).optional(),
+    sampleSize: z
+      .number()
+      .int()
+      .min(0)
+      .max(200)
+      .optional()
+      .describe('How many rows to inline. Defaults to 50. The full pool is only reachable via dumpPath.'),
+    dumpPath: z
+      .string()
+      .optional()
+      .describe('Write the WHOLE pool to this CSV path and return only the path and count. Use this for downstream work — the inline sample is for eyeballing, not for processing.'),
   },
-  async ({ pack: packDir, dimensions, extraQueries, cap }) => {
+  async ({ pack: packDir, dimensions, extraQueries, cap, sampleSize, dumpPath }) => {
     const dir = packDir ?? defaultPackDir();
     const pack = loadPackFromDir(dir);
     const known = new Set(pack.dimensions.map((d) => d.id));
@@ -95,12 +107,50 @@ server.tool(
 
     const pool = new Map<string, OpenAlexWork>();
     for (const query of stage.queries) await collect(query, pool, options(cap));
-    const sample = [...pool.values()].slice(0, 50);
+
+    const all = [...pool.values()].sort((a, b) => (b.cited ?? 0) - (a.cited ?? 0));
+    const limit = sampleSize ?? 50;
+
+    // 池子才是产物，样本只是给你看一眼。
+    // 之前只能拿到 50 条，使用者为了下游处理绕到 bench --dump 写 CSV —— 那本来就是这里该做的事。
+    let dumped: { path: string; rows: number } | null = null;
+    if (dumpPath) {
+      const esc = (v: unknown) => {
+        const text = String(v ?? '');
+        return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+      };
+      const csv = ['doi,year,cited,title']
+        .concat(all.map((w) => [w.doi, w.year ?? '', w.cited ?? 0, w.title].map(esc).join(',')))
+        .join('\r\n');
+      const resolved = path.resolve(dumpPath);
+      fs.mkdirSync(path.dirname(resolved), { recursive: true });
+      fs.writeFileSync(resolved, `\uFEFF${csv}\r\n`, 'utf8');
+      dumped = { path: resolved, rows: all.length };
+    }
+
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ pack: pack.id, dir, poolSize: pool.size, dimensions: dims, sample }, null, 2),
+          text: JSON.stringify(
+            {
+              pack: pack.id,
+              dir,
+              poolSize: pool.size,
+              dimensions: dims,
+              // 说清楚这份清单是怎么来的、按什么筛的 —— 这是使用者最缺的一句话。
+              provenance: {
+                queries: stage.queries,
+                cap: cap ?? null,
+                sampleInlined: Math.min(limit, all.length),
+                fullPoolOnlyViaDump: !dumped,
+              },
+              dumped,
+              sample: all.slice(0, limit),
+            },
+            null,
+            2,
+          ),
         },
       ],
     };
@@ -165,8 +215,12 @@ server.tool(
     pack: z.string().optional().describe('Pack directory. Omit to use the default pack.'),
     stage: z.string().optional().describe('Stage id defined by the pack. Defaults to the last stage.'),
     cap: z.number().int().min(100).max(2000).optional(),
+    dumpPath: z
+      .string()
+      .optional()
+      .describe('Write the full report to this JSON path and inline only a summary. Full stage C can take ~1 min and may exceed the client tool timeout; dumping plus a summary keeps the response small.'),
   },
-  async ({ pack: packDir, stage, cap }) => {
+  async ({ pack: packDir, stage, cap, dumpPath }) => {
     const dir = packDir ?? defaultPackDir();
     const pack = loadPackFromDir(dir);
     const gold = loadGold(dir, goldPathOf(pack, dir));
@@ -187,14 +241,22 @@ server.tool(
     const stages = stagesOf(pack);
     const target = stage ?? stages[stages.length - 1]!.id;
     const result = await runStage(pack, target, gold, options(cap));
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ pack: pack.id, gold: { path: goldPathOf(pack, dir), records: gold.length }, ...result }, null, 2),
-        },
-      ],
-    };
+    const full = { pack: pack.id, gold: { path: goldPathOf(pack, dir), records: gold.length }, ...result };
+
+    if (dumpPath) {
+      const resolved = path.resolve(dumpPath);
+      fs.mkdirSync(path.dirname(resolved), { recursive: true });
+      fs.writeFileSync(resolved, `${JSON.stringify(full, null, 2)}\n`, 'utf8');
+      // 只回摘要：完整报告在文件里，别让它撑爆消息体。
+      const summary = Object.fromEntries(
+        Object.entries(full).filter(([key]) => !['perQuery', 'sample', 'queries'].includes(key)),
+      );
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ ...summary, dumped: resolved }, null, 2) }],
+      };
+    }
+
+    return { content: [{ type: 'text', text: JSON.stringify(full, null, 2) }] };
   },
 );
 

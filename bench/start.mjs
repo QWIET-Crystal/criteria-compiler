@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
 import { evaluate, findCooccurrences } from './lib/criteria.mjs';
 import { appendHistory } from './lib/history.mjs';
+import { make, record, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -41,6 +42,14 @@ const POS = argValue('--pos', '').split(',').map(normalizeDoi).filter(Boolean);
 const NEG = argValue('--neg', '').split(',').map(normalizeDoi).filter(Boolean);
 const CAP = Math.max(50, Math.min(1000, Number(argValue('--cap', '200')) || 200));
 const PICK = Math.max(10, Math.min(100, Number(argValue('--pick', '50')) || 50));
+
+// 时间窗口：起草阶段就能给。没有就在 provenance 里明说「日期只能事后筛」。
+const DATE_WINDOW = (() => {
+  const since = argValue('--since', '');
+  const until = argValue('--until', '');
+  if (!since && !until) return null;
+  return { since: since || null, until: until || null };
+})();
 
 function normalizeDoi(v) {
   return String(v ?? '').trim().toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '').replace(/^doi:\s*/, '');
@@ -318,6 +327,31 @@ async function main() {
 
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, 'draft.json'), JSON.stringify(drafted, null, 2) + '\n', 'utf8');
+
+  // 来历与口径：每份产物旁边都要能回答「从哪来、按什么筛」。
+  const provenance = make({
+    tool: 'bench/start.mjs',
+    builtFrom: { want: WANT, positives: POS, negatives: NEG },
+    filteredBy: {
+      queries: 1,
+      ...(DATE_WINDOW ? { dateWindow: DATE_WINDOW } : {}),   // start 起草时也接受 --since/--until
+      cap: CAP,
+      poolSize: poolWorks.length,
+      dropped: dropped.length,
+    },
+    notIncluded: STANDARD_NOT_INCLUDED,
+    limits: [
+      `正例只有 ${posWorks.length} 篇：判据是从这几篇里长出来的，它抓不到这几篇没提的说法`,
+      '引文网络没查——学姐说的「一定要看参考文献」就是这个缺口',
+    ],
+  });
+  record(outDir, 'draft.json', provenance);
+  record(outDir, 'review-queue.csv', {
+    ...provenance,
+    tool: 'bench/start.mjs',
+    filteredBy: { ...provenance.filteredBy, poolSize: topicPool.length },
+    limits: [...provenance.limits, `队列按判据的命中情况挑，最多 ${PICK} 篇`],
+  });
   fs.writeFileSync(path.join(outDir, 'intake.md'), renderIntake(draft, posWorks, negWorks), 'utf8');
 
   console.log('\n判据草案（这是要给你改的，不是结论）');

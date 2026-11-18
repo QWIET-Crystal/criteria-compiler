@@ -16,12 +16,14 @@
     "bench:json": "node bench/run.mjs --json",
     "validate": "node bench/validate-pack.mjs",
     "build": "tsc -b packages/core packages/cli packages/mcp",
-    "test": "node bench/validate-pack.mjs && node bench/lib/criteria.selftest.mjs && node bench/lib/history.selftest.mjs && node bench/lib/causes.selftest.mjs && vitest run",
+    "test": "node bench/validate-pack.mjs && node bench/lib/criteria.selftest.mjs && node bench/lib/history.selftest.mjs && node bench/lib/causes.selftest.mjs && node bench/lib/provenance.selftest.mjs && vitest run",
     "typecheck": "tsc -b packages/core && pnpm -r typecheck",
     "refine": "node bench/refine.mjs",
     "ledger": "node bench/ledger.mjs",
     "try": "node bench/try.mjs",
-    "why": "node bench/why.mjs"
+    "why": "node bench/why.mjs",
+    "provenance": "node bench/provenance.mjs",
+    "probe": "node bench/run.mjs --probe"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

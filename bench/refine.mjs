@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
 import { evaluate } from './lib/criteria.mjs';
 import { appendHistory, describeDiff, diffSnapshot, isEmptyDiff, lastSnapshot, snapshotOf } from './lib/history.mjs';
+import { make, record, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -475,6 +476,18 @@ async function main() {
     addedNot: addedNot.length,
     nextQueue: merged.length,
   };
+  record(PACK_DIR, `review-queue-v${next.version}.csv`, make({
+    tool: 'bench/refine.mjs',
+    builtFrom: { want: draft.want ?? null, positives: draft.examples?.positive ?? null, negatives: draft.examples?.negative ?? null },
+    filteredBy: { queries: 1, cap: CAP, poolSize: pool.length, dropped: null },
+    notIncluded: STANDARD_NOT_INCLUDED,
+    limits: [
+      `队列最多 ${PICK} 篇`,
+      `判据这时是 v${next.version}，共 ${(next.criteria ?? []).length} 条`,
+      hasLabels ? `本次基于 ${labeled.length} 篇标注` : '本次没有标注，只按当前判据重拉',
+    ],
+  }));
+
   const historyPath = path.join(PACK_DIR, 'history.jsonl');
   fs.appendFileSync(historyPath, JSON.stringify(record) + '\n', 'utf8');
 

@@ -30,6 +30,14 @@ const VERBOSE = !argv.includes('--quiet');
 const NO_CACHE = argv.includes('--no-cache');
 const DUMP = argValue('--dump', '');
 
+// 种子召回：没有金集也能自查。
+//
+// 使用者原话：「我后来的做法是拿二十几篇已知的好文章当种子，看每条查询能召回几篇。
+// 这可以正式做成一个模式，不需要 gold 就能跑。」
+//
+// 它和 axis-yield 问的不是一件事：那边量「哪条轴在承重」，这边量「我认识的都找回来了没」。
+const PROBE = argValue('--probe', '').split(',').map((d) => normalizeDoi(d)).filter(Boolean);
+
 const cacheFile = (url) => path.join(CACHE_DIR, `${crypto.createHash('sha1').update(url).digest('hex')}.json`);
 const cacheRead = (url) => {
   if (NO_CACHE) return null;
@@ -408,11 +416,65 @@ function evaluate(pool, gold) {
   };
 }
 
+/**
+ * --probe：给一批已知好的 DOI，报每条查询各召回了其中几篇。
+ * 不需要金标，所以任何新领域一上手就能用。
+ */
+async function probeSeeds() {
+  const canonical = PROBE.map((d) => canonicalDoi(d));
+  const stages = ONLY_STAGE ? STAGES.filter((s2) => s2.id === ONLY_STAGE) : STAGES;
+
+  console.log(`\n种子召回 · ${canonical.length} 篇已知的好文章`);
+  console.log('─'.repeat(72));
+  console.log('（不需要金标：你手上认识的任何一批论文都能当种子）\n');
+
+  for (const stage of stages) {
+    const union = new Set();
+    console.log(`${stage.id}. ${stage.label}`);
+    let index = 0;
+    for (const query of stage.queries) {
+      index++;
+      const pool = new Map();
+      const result = await runQueryAll(query, pool);
+      const hit = canonical.filter((doi) => pool.has(doi));
+      for (const doi of hit) union.add(doi);
+      const label = `  ${stage.id}·${index}`.padEnd(8);
+      console.log(`${label}${String(hit.length).padStart(3)}/${canonical.length}   ${query.slice(0, 52)}${result.error ? `  ERR ${result.error}` : ''}`);
+      if (VERBOSE && hit.length && hit.length <= 6) console.log(`          ↳ ${hit.join('、')}`);
+    }
+    console.log(`  ${stage.id} 并集    ${String(union.size).padStart(3)}/${canonical.length}\n`);
+  }
+
+  const all = new Set();
+  for (const stage of stages) {
+    for (const query of stage.queries) {
+      const pool = new Map();
+      await runQueryAll(query, pool);
+      for (const doi of canonical) if (pool.has(doi)) all.add(doi);
+    }
+  }
+  const missing = canonical.filter((doi) => !all.has(doi));
+  console.log('─'.repeat(72));
+  console.log(`全部查询并集：${all.size}/${canonical.length}`);
+  if (missing.length) {
+    console.log(`一条查询都没召回：${missing.length} 篇`);
+    console.log('  这些要么是词表没覆盖，要么是它们本身没有摘要/不在这个库。');
+    for (const doi of missing) console.log(`    · ${doi}`);
+  } else {
+    console.log('所有种子至少被一条查询召回。');
+  }
+}
+
 async function main() {
   const goldPath = PACK.gold ? path.join(PACK_DIR, PACK.gold) : null;
   if (goldPath && !fs.existsSync(goldPath)) throw new Error(`missing ${goldPath}`);
   const gold = goldPath ? parseCsv(fs.readFileSync(goldPath, 'utf8')) : null;
   const retrievalOnly = !gold;
+  if (PROBE.length) {
+    await probeSeeds();
+    return;
+  }
+
   const startedAt = Date.now();
   if (!API_KEY && VERBOSE) {
     process.stderr.write('\nnote: no OPENALEX_API_KEY. Anonymous calls share one daily budget per egress IP\n');
