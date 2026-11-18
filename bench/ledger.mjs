@@ -16,6 +16,9 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import { evaluate } from './lib/criteria.mjs';
+import { loadWorks } from './lib/io.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const API = 'https://api.openalex.org/works';
@@ -115,6 +118,92 @@ async function hitsOf(query) {
   return { keys, total };
 }
 
+/**
+ * 判据账：拿一份草案里的 criteria，在已知阳性上跑一遍。
+ *
+ * 这不是检索账——它问的是「判据认不认得出这些我们已知该算的论文」。
+ * 认出太少 = 判据太窄（欠拟合）；全认得出也不代表对，还要看它会不会乱认。
+ *
+ * 判定规则与 bench/try.mjs、bench/refine.mjs 完全一致。
+ */
+async function criteriaCheck(criteriaPath, pack, positives) {
+  const draft = JSON.parse(fs.readFileSync(path.resolve(criteriaPath), 'utf8'));
+  const criteria = draft.criteria ?? [];
+  if (!criteria.length) fail(`${criteriaPath} 里没有结构化 criteria。`);
+
+  console.log(`\n判据账 · ${pack.id}`);
+  console.log('─'.repeat(78));
+  console.log(`用 ${path.relative(ROOT, path.resolve(criteriaPath))} 的 ${criteria.length} 条判据：`);
+  for (const item of criteria) console.log(`  ${item.id}(${item.kind})  ${(item.terms ?? []).join('、')}`);
+  console.log(`在 ${positives.length} 篇已知阳性上跑（这些是人工判定为「该算」的）：`);
+
+  const works = await loadWorks(positives.map((row) => row.doi));
+  const rows = positives.map((row) => {
+    const doi = canonicalDoi(normalizeDoi(row.doi));
+    const work = works.get(doi);
+    const text = work ? `${work.title} ${work.abstract}` : '';
+    if (!text) return { doi, note: row.note ?? '', status: 'no_text', evidence: [], reason: '取不到题录或摘要' };
+
+    const results = evaluate(criteria, text);
+    const violated = results.find((r) => r.kind === 'absent' && !r.matched);
+    const coOccur = results.filter((r) => r.kind === 'co-occur');
+    const said = coOccur.length
+      ? coOccur.some((r) => r.matched)
+      : results.some((r) => r.kind !== 'absent' && r.matched);
+
+    return {
+      doi,
+      note: row.note ?? '',
+      status: said && !violated ? 'recognized' : 'missed',
+      violated: Boolean(violated),
+      evidence: results.filter((r) => r.kind !== 'absent' && r.matched).flatMap((r) => r.evidence.slice(0, 1)),
+      reason: violated ? `踩到排除信号「${violated.evidence[0]?.quote ?? '?'}」` : said ? '判据说算' : coOccur.length ? '共现判据没命中' : '没有任何正向判据命中',
+    };
+  });
+
+  console.log('');
+  for (const row of rows) {
+    const mark = row.status === 'recognized' ? '✓' : '✗';
+    console.log(`  ${mark} ${row.doi}`);
+    if (row.status === 'recognized') {
+      // 证据去重：几条共现判据常常撞到同一个词，重复印出来只会让人看不清。
+      const seenQuote = new Set();
+      const quotes = row.evidence
+        .map((e) => e.quote)
+        .filter((quote) => {
+          const key = String(quote).toLowerCase();
+          if (seenQuote.has(key)) return false;
+          seenQuote.add(key);
+          return true;
+        })
+        .map((quote) => `「${quote}」`)
+        .join(' 与 ');
+      console.log(`      认出来了：${quotes || row.reason}`);
+    } else {
+      console.log(`      ${row.reason}`);
+      if (row.note) console.log(`      （人工备注：${row.note}）`);
+    }
+  }
+
+  const recognized = rows.filter((r) => r.status === 'recognized').length;
+  const missed = rows.filter((r) => r.status === 'missed').length;
+  const noText = rows.filter((r) => r.status === 'no_text').length;
+
+  console.log('');
+  console.log('小结');
+  console.log('─'.repeat(78));
+  console.log(`  判据认出 ${recognized}/${positives.length}${noText ? `（${noText} 篇取不到文本）` : ''}`);
+  // 欠拟合防线：判据认不出已知该算的论文，是最危险的失败——它看起来"很干净"。
+  if (recognized < positives.length * 0.8) {
+    console.log(`  ❌ 认得太少。判据可能太窄（欠拟合）——它把该算的论文判成了不算。`);
+    console.log('     这正是过拟合的反面，也一样难发现：错得很安静。');
+  } else if (missed) {
+    console.log(`  ⚠️ 漏认 ${missed} 篇。看一眼上面每条的原因，判断是判据太窄，还是这几篇确实特殊。`);
+  } else {
+    console.log('  ✅ 全部认出。但这只说明它没把已知的丢掉；会不会乱认「不算」的，要另测。');
+  }
+}
+
 async function main() {
   const packFile = path.join(PACK_DIR, 'pack.json');
   if (!fs.existsSync(packFile)) fail(`${PACK_DIR} 下没有 pack.json`);
@@ -125,6 +214,13 @@ async function main() {
   const gold = parseCsv(fs.readFileSync(goldPath, 'utf8'));
   const positives = gold.filter((g) => Number(g.label) === 2);
   if (!positives.length) fail('金集里没有阳性，账本无从记起。');
+
+  // 给了 --criteria 就只做判据账（判据认不认得出已知该算的），不重放检索查询。
+  const criteriaPath = argValue('--criteria', '');
+  if (criteriaPath) {
+    await criteriaCheck(criteriaPath, pack, positives);
+    return;
+  }
 
   // 查询从 run.mjs 的 --json 里取，不自己拼。
   // 自己拼一套就会和基准分叉——账本一旦和基准说的不是同一批查询，账就是假的。
