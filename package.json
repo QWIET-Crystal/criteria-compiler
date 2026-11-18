@@ -18,7 +18,8 @@
     "build": "tsc -b packages/core packages/cli packages/mcp",
     "test": "node bench/validate-pack.mjs && vitest run",
     "typecheck": "tsc -b packages/core && pnpm -r typecheck",
-    "refine": "node bench/refine.mjs"
+    "refine": "node bench/refine.mjs",
+    "ledger": "node bench/ledger.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

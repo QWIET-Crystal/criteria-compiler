@@ -1,0 +1,165 @@
+{
+  "pack": "cof-h2o2",
+  "generatedAt": "2026-11-18T06:49:33.206Z",
+  "cap": 500,
+  "positives": 7,
+  "recovered": 6,
+  "stillMissing": 1,
+  "sources": [
+    {
+      "id": "A·1",
+      "stage": "A",
+      "query": "(\"covalent organic framework\" OR \"COF\" OR \"CTF\") AND (\"hydrogen peroxide\" OR \"H2O2\")",
+      "why": null
+    },
+    {
+      "id": "B·2",
+      "stage": "B",
+      "query": "(\"conjugated microporous polymer\") AND (\"hydrogen peroxide\" OR \"H2O2\")",
+      "why": null
+    },
+    {
+      "id": "B·3",
+      "stage": "B",
+      "query": "(\"heptazine imide\" OR \"poly(heptazine imide)\") AND (\"hydrogen peroxide\" OR \"H2O2\")",
+      "why": null
+    },
+    {
+      "id": "B·4",
+      "stage": "B",
+      "query": "(\"carbon nitride\" OR \"C3N4\" OR \"polymeric carbon nitride\") AND (\"hydrogen peroxide\" OR \"H2O2\")",
+      "why": null
+    },
+    {
+      "id": "B·5",
+      "stage": "B",
+      "query": "(\"cadmium sulfide\" OR \"CdS\") AND (\"hydrogen peroxide\" OR \"H2O2\")",
+      "why": null
+    },
+    {
+      "id": "B·6",
+      "stage": "B",
+      "query": "(\"Bi2O2S\" OR \"bismuth oxysulfide\" OR \"CuInS2\") AND (\"hydrogen peroxide\" OR \"H2O2\")",
+      "why": null
+    },
+    {
+      "id": "spaced-formula",
+      "stage": "correction",
+      "query": "(Bi2O2S OR \"Bi 2 O 2 S\" OR CuInS2) AND (\"hydrogen peroxide\" OR H2O2)",
+      "why": "The API renders subscripts as spaces (Bi 2 O 2 S), so a literal query misses it."
+    },
+    {
+      "id": "no-product-word",
+      "stage": "correction",
+      "query": "(\"carbon nitride\" OR C3N4) AND methane AND ethanol",
+      "why": "Class-C papers consume H2O2 in situ and never name it in the abstract."
+    }
+  ],
+  "records": [
+    {
+      "doi": "10.1002/adfm.202510257",
+      "title": "10.1002/adfm.202510257（BT-COF; two-phase system; both products in one figure）",
+      "status": "recovered",
+      "first_query": "A·1",
+      "first_stage": "A",
+      "reason": {
+        "kind": "axis",
+        "id": "A·1",
+        "why": "COF only"
+      },
+      "hit_by": [
+        "A·1"
+      ]
+    },
+    {
+      "doi": "10.1021/jacs.6c00731",
+      "title": "10.1021/jacs.6c00731（sp2-COF-CN; coupled run is 24 mM）",
+      "status": "still_missing",
+      "first_query": null,
+      "first_stage": null,
+      "reason": {
+        "kind": "unknown",
+        "id": null,
+        "why": "所有声明过的查询都没把它拉回来"
+      },
+      "hit_by": []
+    },
+    {
+      "doi": "10.1002/adfm.202316773",
+      "title": "10.1002/adfm.202316773（self-floating tri-phase; suppresses H2O2 self-decomposition）",
+      "status": "recovered",
+      "first_query": "B·2",
+      "first_stage": "B",
+      "reason": {
+        "kind": "axis",
+        "id": "B·2",
+        "why": "six material families"
+      },
+      "hit_by": [
+        "B·2",
+        "B·5"
+      ]
+    },
+    {
+      "doi": "10.1016/j.apcatb.2024.124896",
+      "title": "10.1016/j.apcatb.2024.124896（KNPHI; sacrificial agent dominates the main text）",
+      "status": "recovered",
+      "first_query": "B·3",
+      "first_stage": "B",
+      "reason": {
+        "kind": "axis",
+        "id": "B·3",
+        "why": "six material families"
+      },
+      "hit_by": [
+        "B·3"
+      ]
+    },
+    {
+      "doi": "10.1002/adfm.202510323",
+      "title": "10.1002/adfm.202510323（formulas are space-rendered (H 2 O 2 / Bi 2 O 2 S); needs normalization）",
+      "status": "recovered",
+      "first_query": "spaced-formula",
+      "first_stage": "correction",
+      "reason": {
+        "kind": "correction",
+        "id": "spaced-formula",
+        "why": "The API renders subscripts as spaces (Bi 2 O 2 S), so a literal query misses it."
+      },
+      "hit_by": [
+        "spaced-formula"
+      ]
+    },
+    {
+      "doi": "10.1002/aenm.71443",
+      "title": "10.1002/aenm.71443（H2O2 acts as the oxidant; phenylboronic acid to phenol）",
+      "status": "recovered",
+      "first_query": "B·5",
+      "first_stage": "B",
+      "reason": {
+        "kind": "axis",
+        "id": "B·5",
+        "why": "six material families"
+      },
+      "hit_by": [
+        "B·5"
+      ]
+    },
+    {
+      "doi": "10.1038/s41467-019-08454-0",
+      "title": "10.1038/s41467-019-08454-0（abstract never mentions H2O2; it is a transient intermediate (methane to ethanol)）",
+      "status": "recovered",
+      "first_query": "no-product-word",
+      "first_stage": "correction",
+      "reason": {
+        "kind": "correction",
+        "id": "no-product-word",
+        "why": "Class-C papers consume H2O2 in situ and never name it in the abstract."
+      },
+      "hit_by": [
+        "no-product-word"
+      ]
+    }
+  ],
+  "promotable": []
+}
