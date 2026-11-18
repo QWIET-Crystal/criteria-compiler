@@ -20,6 +20,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
+import { evaluate, findCooccurrences } from './lib/criteria.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -163,35 +164,43 @@ async function fetchPool(terms, cap) {
 
 // ── 挑「最该由人来标的」那一批 ───────────────────────────────────────────────
 // 不用模型。判据是：**草案自己拿不准的论文最值钱**。
-// 两个检查意见相反 → 最能教我们东西；只中一半区分词 → 贴在边界上。
+// 「拿不准」不是数命中几个词，而是几条判据之间意见不一致——尤其是共现判据说中、
+// 但排除判据也踩到的那一种。
 
-function rankBoundary(works, terms, negMarkers, known = new Set()) {
-  const negRe = negMarkers.length ? new RegExp(negMarkers.map((t) => escapeRe(t.term)).join('|'), 'i') : null;
+function rankBoundary(works, criteria, known = new Set()) {
+  const rows = works
+    .filter((work) => !known.has(work.doi))
+    .map((work) => {
+      const results = evaluate(criteria, `${work.title} ${work.abstract}`);
+      const fired = results.filter((r) => r.matched);
+      const co = results.find((r) => r.kind === 'co-occur' && r.matched);
+      const anyFired = results.find((r) => r.kind === 'any' && r.matched);
+      const absentViolated = results.find((r) => r.kind === 'absent' && !r.matched);
+      const total = results.length;
 
-  const scored = works.map((work) => {
-    const text = `${work.title} ${work.abstract}`.toLowerCase();
-    const hits = terms.filter((t) => text.includes(t.term)).length;
-    return { ...work, hits, neg: negRe ? negRe.test(text) : false };
-  });
-
-  // 命中越多越贴近本题。真正的边界是**刚好在交集边上**的那一圈，不是最外围。
-  const top = Math.max(...scored.map((r) => r.hits), 0);
-  const edgeFrom = Math.max(1, top - 3);
-
-  const rows = scored
-    .filter((r) => !known.has(r.doi))
-    .map((r) => {
       let score = 0;
       let why = '与本题无关';
-      if (r.hits >= edgeFrom && r.neg) { score = 5; why = `命中 ${r.hits}/${terms.length} 个区分词，但同时踩到排除信号——两个检查意见相反`; }
-      else if (r.hits >= edgeFrom && r.hits < top) { score = 4; why = `命中 ${r.hits}/${terms.length} 个，贴着交集边缘`; }
-      else if (r.hits >= top) { score = 3; why = `命中 ${r.hits}/${terms.length} 个——草案最确定的这一批，抽查它们对不对`; }
-      else if (r.neg) { score = 1; why = `只踩到排除信号（命中 ${r.hits} 个）`; }
-      return { ...r, score, why };
+      if (co && absentViolated) {
+        score = 5;
+        why = `共现判据说中说，但踩到排除信号「${absentViolated.evidence[0]?.quote ?? '?'}」——两条判据打架`;
+      } else if (co) {
+        score = 4;
+        why = `共现判据命中：${co.reason}`;
+      } else if (fired.length > 0 && fired.length < total) {
+        score = 3;
+        why = `只中 ${fired.length}/${total} 条判据，贴着边界`;
+      } else if (fired.length === total && total > 0) {
+        score = 2;
+        why = `全部判据都中——草案最确定的一批，抽查它们对不对`;
+      } else if (absentViolated) {
+        score = 1;
+        why = `只踩到排除信号「${absentViolated.evidence[0]?.quote ?? '?'}」`;
+      }
+      return { ...work, score, why, fired: fired.length, total };
     })
     .filter((r) => r.score > 0);
 
-  rows.sort((a, b) => (b.score - a.score) || (b.hits - a.hits) || (b.cited - a.cited));
+  rows.sort((a, b) => (b.score - a.score) || (b.fired - a.fired) || (b.cited - a.cited));
   return rows;
 }
 
@@ -235,6 +244,34 @@ async function main() {
   // 「各自只沾一个词」的杂牌军，交集被稀释到只剩一两篇。
   const topicPool = poolWorks;
 
+  // ── 共现判据：这是「数词频」补不上的那一块 ────────────────────────────────
+  // 一个 (A, B) 要成为判据：在 ≥2 篇正例的同一句里一起出现，且在任何反例的同一句里
+  // 都没一起出现过。只查「反例里有没有 B」不够——要查「有没有一起出现」。
+  // 共现只用「够稀有」的词来配。
+  // 用全量词表的话，第一条永远是 charge + electron —— 这两个词在正例里 100% 出现，
+  // 却不是判据，是这个领域的常识；它们的共现对任何论文都成立，等于没判据。
+  const specificTerms = terms.filter((t) => t.df <= 0.05).map((t) => t.term);
+  const termList = (specificTerms.length >= 3 ? specificTerms : terms.map((t) => t.term));
+  const posWithTerms = posWorks.map((work) => ({ ...work, _terms: termList }));
+  const negWithTerms = negWorks.map((work) => ({ ...work, _terms: termList }));
+  const coPairs = termList.length
+    ? findCooccurrences(posWithTerms, negWithTerms, { minPos: Math.min(2, posWorks.length), limit: 6 })
+    : [];
+
+  const criteria = [
+    { id: 'core-any', kind: 'any', terms: termList.slice(0, 8), note: '区分词，任一说法的出现就算接触到了主题' },
+    ...coPairs.map((pair, i) => ({
+      id: `co-${i + 1}`,
+      kind: 'co-occur',
+      terms: pair.terms,
+      note: `「${pair.terms[0]}」和「${pair.terms[1]}」在你 ${pair.positiveCount} 篇正例的同一句里一起出现，反例里从来没有过`,
+      sample: pair.sample,
+    })),
+    ...(negMarkers.length
+      ? [{ id: 'exclusion', kind: 'absent', terms: negMarkers.slice(0, 4).map((t) => t.term), note: '只出现在你反例里的说法，出现就意味着「这样可能不算」' }]
+      : []),
+  ];
+
   // ── 草案 ────────────────────────────────────────────────────────────────
   const draft = {
     pack: ID,
@@ -242,6 +279,7 @@ async function main() {
     examples: { positive: POS, negative: NEG },
     mustHave: terms.map((t) => ({ term: t.term, inPositives: t.count, poolFrequency: Number(t.df.toFixed(3)) })),
     mustNot: negMarkers.map((t) => t.term),
+    criteria,
     checks: [
       {
         id: 'core-terms',
@@ -281,9 +319,11 @@ async function main() {
   }
   if (dropped.length) console.log(`  丢弃的通用词 ${dropped.length} 个：${dropped.slice(0, 6).map((d) => d.term).join('、')}…`);
   console.log('');
-  for (const check of draft.checks) {
-    console.log(`  [${check.id}] ${check.note}`);
-    console.log(`    命中模式：${check.pattern}`);
+  for (const item of criteria) {
+    console.log(`  [${item.id}] ${item.note}`);
+    if (item.kind === 'co-occur') console.log(`    共现：${item.terms.join('  +  ')}`);
+    else console.log(`    ${item.kind}：${item.terms.join('、')}`);
+    if (item.sample) console.log(`    出自你的正例：「${item.sample.slice(0, 120)}…」`);
     console.log('');
   }
   if (draft.openQuestions.length) {
@@ -293,7 +333,7 @@ async function main() {
 
   // ── 边界样本 ────────────────────────────────────────────────────────────
   console.log(`\n正在按这份草案找「最该由你来标」的论文……`);
-  const rows = rankBoundary(topicPool, terms, negMarkers, new Set([...POS, ...NEG]));
+  const rows = rankBoundary(topicPool, criteria, new Set([...POS, ...NEG]));
   const picked = rows.slice(0, PICK);
 
   const csv = ['doi,title,year,cited,why,verdict'];

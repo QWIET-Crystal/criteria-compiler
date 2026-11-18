@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
+import { evaluate } from './lib/criteria.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -201,6 +202,23 @@ async function main() {
     return work ? `${work.title} ${work.abstract}`.toLowerCase() : '';
   };
 
+  // 判定规则先定义，后面两处（留一检验、本轮分桶）都要用它。
+  //
+  // 如果草案里有结构化的 criteria（含共现 / 排除），优先用它，而不是数词频。
+  // 为什么要「至少两条判据同时中」才算：单条 any 判据就是一张词表，几乎什么都沾边；
+  // 真正有信息量的是**不同判据之间互相印证**。这条也是给用户留的口子——
+  // 他可以直接编辑 draft.json 里的 criteria，人给概念，机器只做记账。
+  const criteria = Array.isArray(draft.criteria) && draft.criteria.length ? draft.criteria : null;
+  const guessAt = (doi, k) => terms.filter((t) => textOf(doi).includes(t)).length >= k;
+  const decideWith = (doi, k) => {
+    if (!criteria) return guessAt(doi, k);
+    const results = evaluate(criteria, textOf(doi));
+    const exclusion = results.find((r) => r.kind === 'absent');
+    if (exclusion && !exclusion.matched) return false; // 踩到排除信号，直接不算
+    const positive = results.filter((r) => r.kind !== 'absent' && r.matched);
+    return positive.length >= 2;
+  };
+
   // ── 1. 校准松紧 ───────────────────────────────────────────────────────────
   // 「命中一个词就算」几乎一定太松：一个领域里到处都是相关的词。
   // 你标过的每一篇都给了一个「命中几个」的数，这些数天然分成了两堆。
@@ -215,7 +233,7 @@ async function main() {
     const verdict = String(row.verdict).trim();
     if (verdict === '1') continue;
     const said = verdict === '2';
-    const guessed = terms.filter((t) => textOf(row.doi).includes(t)).length >= currentMinHits;
+    const guessed = decideWith(row.doi, currentMinHits);
     if (said && guessed) incomingBuckets.tp++;
     else if (!said && !guessed) incomingBuckets.tn++;
     else if (said) incomingBuckets.fn++;
@@ -226,21 +244,19 @@ async function main() {
 
   let bestK = currentMinHits;
   let bestAgreed = -1;
-  if (observations.length) {
+  if (observations.length && !criteria) {
     const maxHits = Math.max(...observations.map((o) => o.hits), 1);
     for (let k = 1; k <= maxHits + 1; k++) {
       const agreed = observations.filter((o) => (o.hits >= k) === o.said).length;
       if (agreed > bestAgreed) { bestAgreed = agreed; bestK = k; }
     }
   }
-
-  const guessAt = (doi, k) => terms.filter((t) => textOf(doi).includes(t)).length >= k;
   const buckets = { tp: [], tn: [], fn: [], fp: [], unsure: [] };
   for (const row of labeled) {
     const verdict = String(row.verdict).trim();
     if (verdict === '1') { buckets.unsure.push(row); continue; }
     const said = verdict === '2';
-    const guessed = guessAt(row.doi, bestK);
+    const guessed = decideWith(row.doi, bestK);
     if (said && guessed) buckets.tp.push(row);
     else if (!said && !guessed) buckets.tn.push(row);
     else if (said && !guessed) buckets.fn.push(row);
