@@ -23,7 +23,8 @@
     "try": "node bench/try.mjs",
     "why": "node bench/why.mjs",
     "provenance": "node bench/provenance.mjs",
-    "probe": "node bench/run.mjs --probe"
+    "probe": "node bench/run.mjs --probe",
+    "audit": "node bench/term-audit.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
