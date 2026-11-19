@@ -29,11 +29,11 @@ node bench/contradictions.mjs --refresh    # 需要联网，第一次
 **`run.mjs`** —— 三档召回。
 ```
 stage                             pool      positives     negatives
-A. COF only                       814       2/7           0/2
-B. six material families          2826      7/7           0/2
-C. six families + 3 fixes         2837      7/7           0/2
+A. COF only                       815       2/6           0/3
+B. six material families          2838      6/6           1/3
+C. six families + 3 fixes         2850      6/6           1/3
 ```
-👉 重点不是那个 7/7。**重点是 A 段只捞到 2**——同样的金集、同样的库，只是换了个检索维度。这是整个项目唯一一条被数据钉死的结论。
+👉 重点不是那个 6/6。**重点是 A 段只捞到 2**——同样的金集、同样的库，只是换了个检索维度。这是整个项目唯一一条被数据钉死的结论。
 
 **`contradictions.mjs`** —— 对账。它把「判据的结论」和「人的判断」对上，只输出不一致的地方：
 
