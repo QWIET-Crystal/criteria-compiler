@@ -211,5 +211,15 @@
       "why": "「把底物变成有价值产物」——这正是判「真耦合」的核心词"
     }
   ],
-  "couplingPhrasesNote": "这些不是统计出来的，来自 skills/criteria-compiler/references/rules.md 第三节的原文用词表。用法：与对象词组成 co-occur（同句出现）判据——「H2O2 … coupled with X」才是真耦合声明，两段各说各的不能算。"
+  "couplingPhrasesNote": "这些不是统计出来的，来自 skills/criteria-compiler/references/rules.md 第三节的原文用词表。用法：与对象词组成 co-occur（同句出现）判据——「H2O2 … coupled with X」才是真耦合声明，两段各说各的不能算。",
+  "inclusionStandard": {
+    "strict": "产 H2O2 + 耦合 + 涉及 COF。耦合指：在产 H2O2 的同时，把低价值有机物转化成高价值有机物。",
+    "current": "产 H2O2 + 涉及 COF。文献太少，暂时不要求耦合。",
+    "whyRelaxed": "按严格标准能纳排的文献实在太少，撑不起一篇综述。",
+    "openQuestion": "已定（2026-11-19 课题组）：只算 COF 骨架，姊妹体系（CMP / PHI / 碳氮 / CdS）不纳入。",
+    "decidedBy": "课题组，2026-11-19",
+    "cofScope": "strict：只算骨架是 COF 的；姊妹体系标 1（不纳入），不是标 0（不算）",
+    "consequence": "金集从 6 篇变 2 篇。重跑后单轴已 2/2，「换检索维度提高覆盖」这条结论对本综述不再成立——多出来的 4 篇本来就不该计入分母。详见 docs/inclusion-standard-change.md"
+  },
+  "standardsNote": "这两条标准是**纳排**标准（这篇论文进不进综述），不是章节分类。四型（A 载流子耦合 / B H2O2 介导 / C H2O2→ROS / D 附加级联）是**章节分类**，在严格标准下它同时也是纳排条件；在现行标准下它只决定这篇放进哪一节。material_scope（COF / 姊妹体系 / composite）已经在区分材料归属，所以「纳排宽、章节按 scope 分」在结构上是支持的。"
 }

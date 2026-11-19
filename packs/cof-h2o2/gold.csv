@@ -1,10 +1,10 @@
 doi,label,coupling_type,material_scope,has_abstract,note
 10.1002/adfm.202510257,2,A,COF,yes,BT-COF; two-phase system; both products in one figure
 10.1021/jacs.6c00731,2,A,COF,yes,sp2-COF-CN; coupled run is 24 mM, headline 17768 belongs to the sacrificial run
-10.1002/adfm.202316773,2,A,CMP,yes,self-floating tri-phase; suppresses H2O2 self-decomposition
-10.1016/j.apcatb.2024.124896,2,A,hybrid,yes,KNPHI; sacrificial agent dominates the main text, coupling is a separate run
-10.1002/adfm.202510323,2,A,hybrid,yes,formulas are space-rendered (H 2 O 2 / Bi 2 O 2 S); needs normalization
-10.1002/aenm.71443,2,B,CdS,yes,H2O2 acts as the oxidant; phenylboronic acid to phenol
+10.1002/adfm.202316773,1,A,CMP,yes,不纳入（2026-11-19 收紧为只算 COF 骨架）：CMP 姊妹体系
+10.1016/j.apcatb.2024.124896,1,A,hybrid,yes,不纳入：KNPHI 姊妹体系，非 COF 骨架
+10.1002/adfm.202510323,1,A,hybrid,yes,不纳入：Bi2O2S/CuInS2，不含 COF
+10.1002/aenm.71443,1,B,CdS,yes,不纳入：CdS 姊妹体系，非 COF 骨架
 10.1038/s41467-019-08454-0,0,-,hybrid,yes,不属于本判据：只涉及光催化与有机物升值；H2O2 只是瞬态中间体，不作为产物也不体现耦合（2026-11-19 课题组改判）
 10.1016/j.apcatb.2026.127309,0,-,hybrid,yes,electrocatalytic series operation; not photocatalytic; negative control
 10.1016/j.mser.2025.101117,0,-,COF,no,bifunctional not coupled; benzylamine run starts with "In addition"; abstract missing in OpenAlex
