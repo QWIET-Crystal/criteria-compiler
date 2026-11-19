@@ -165,6 +165,114 @@
       "sample": "Furthermore, sp 2 -COF-CN demonstrates high efficiency in diverse aerobic oxidation reactions, including the oxidation of furfuryl alcohol in water and the benzylamine- and thiophenol-based coupling r"
     },
     {
+      "id": "coupling-1",
+      "kind": "co-occur",
+      "terms": [
+        "coupled with",
+        "hydrogen peroxide"
+      ],
+      "note": "最直接的耦合声明；阳性 2/6、池子 9/120"
+    },
+    {
+      "id": "coupling-1a",
+      "kind": "co-occur",
+      "terms": [
+        "coupled with",
+        "H2O2"
+      ],
+      "note": "最直接的耦合声明；阳性 2/6、池子 9/120"
+    },
+    {
+      "id": "coupling-1b",
+      "kind": "co-occur",
+      "terms": [
+        "coupled with",
+        "H 2 O 2"
+      ],
+      "note": "最直接的耦合声明；阳性 2/6、池子 9/120"
+    },
+    {
+      "id": "coupling-2",
+      "kind": "co-occur",
+      "terms": [
+        "concurrent",
+        "hydrogen peroxide"
+      ],
+      "note": "「同时发生」，对应 A 型载流子耦合"
+    },
+    {
+      "id": "coupling-2a",
+      "kind": "co-occur",
+      "terms": [
+        "concurrent",
+        "H2O2"
+      ],
+      "note": "「同时发生」，对应 A 型载流子耦合"
+    },
+    {
+      "id": "coupling-2b",
+      "kind": "co-occur",
+      "terms": [
+        "concurrent",
+        "H 2 O 2"
+      ],
+      "note": "「同时发生」，对应 A 型载流子耦合"
+    },
+    {
+      "id": "coupling-3",
+      "kind": "co-occur",
+      "terms": [
+        "integrated with",
+        "hydrogen peroxide"
+      ],
+      "note": "集成式表达，多半是 B/C 型"
+    },
+    {
+      "id": "coupling-3a",
+      "kind": "co-occur",
+      "terms": [
+        "integrated with",
+        "H2O2"
+      ],
+      "note": "集成式表达，多半是 B/C 型"
+    },
+    {
+      "id": "coupling-3b",
+      "kind": "co-occur",
+      "terms": [
+        "integrated with",
+        "H 2 O 2"
+      ],
+      "note": "集成式表达，多半是 B/C 型"
+    },
+    {
+      "id": "coupling-4",
+      "kind": "co-occur",
+      "terms": [
+        "valorization",
+        "hydrogen peroxide"
+      ],
+      "note": "「把底物变成有价值产物」——这正是判「真耦合」的核心词"
+    },
+    {
+      "id": "coupling-4a",
+      "kind": "co-occur",
+      "terms": [
+        "valorization",
+        "H2O2"
+      ],
+      "note": "「把底物变成有价值产物」——这正是判「真耦合」的核心词"
+    },
+    {
+      "id": "coupling-4b",
+      "kind": "co-occur",
+      "terms": [
+        "valorization",
+        "H 2 O 2"
+      ],
+      "note": "「把底物变成有价值产物」——这正是判「真耦合」的核心词"
+    },
+    {
       "id": "exclusion",
       "kind": "absent",
       "terms": [
@@ -228,7 +336,7 @@
   "history": [
     {
       "version": 1,
-      "at": "2026-11-19T05:00:22.025Z",
+      "at": "2026-11-19T05:04:14.616Z",
       "by": "start.mjs",
       "what": "起草",
       "why": "来自 3 篇正例、1 篇反例；11 个区分词",
@@ -311,6 +419,114 @@
             ],
             "note": "「aerobic oxidation」和「alcohol」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
             "sample": "Furthermore, sp 2 -COF-CN demonstrates high efficiency in diverse aerobic oxidation reactions, including the oxidation of furfuryl alcohol in water and the benzylamine- and thiophenol-based coupling r"
+          },
+          {
+            "id": "coupling-1",
+            "kind": "co-occur",
+            "terms": [
+              "coupled with",
+              "hydrogen peroxide"
+            ],
+            "note": "最直接的耦合声明；阳性 2/6、池子 9/120"
+          },
+          {
+            "id": "coupling-1a",
+            "kind": "co-occur",
+            "terms": [
+              "coupled with",
+              "H2O2"
+            ],
+            "note": "最直接的耦合声明；阳性 2/6、池子 9/120"
+          },
+          {
+            "id": "coupling-1b",
+            "kind": "co-occur",
+            "terms": [
+              "coupled with",
+              "H 2 O 2"
+            ],
+            "note": "最直接的耦合声明；阳性 2/6、池子 9/120"
+          },
+          {
+            "id": "coupling-2",
+            "kind": "co-occur",
+            "terms": [
+              "concurrent",
+              "hydrogen peroxide"
+            ],
+            "note": "「同时发生」，对应 A 型载流子耦合"
+          },
+          {
+            "id": "coupling-2a",
+            "kind": "co-occur",
+            "terms": [
+              "concurrent",
+              "H2O2"
+            ],
+            "note": "「同时发生」，对应 A 型载流子耦合"
+          },
+          {
+            "id": "coupling-2b",
+            "kind": "co-occur",
+            "terms": [
+              "concurrent",
+              "H 2 O 2"
+            ],
+            "note": "「同时发生」，对应 A 型载流子耦合"
+          },
+          {
+            "id": "coupling-3",
+            "kind": "co-occur",
+            "terms": [
+              "integrated with",
+              "hydrogen peroxide"
+            ],
+            "note": "集成式表达，多半是 B/C 型"
+          },
+          {
+            "id": "coupling-3a",
+            "kind": "co-occur",
+            "terms": [
+              "integrated with",
+              "H2O2"
+            ],
+            "note": "集成式表达，多半是 B/C 型"
+          },
+          {
+            "id": "coupling-3b",
+            "kind": "co-occur",
+            "terms": [
+              "integrated with",
+              "H 2 O 2"
+            ],
+            "note": "集成式表达，多半是 B/C 型"
+          },
+          {
+            "id": "coupling-4",
+            "kind": "co-occur",
+            "terms": [
+              "valorization",
+              "hydrogen peroxide"
+            ],
+            "note": "「把底物变成有价值产物」——这正是判「真耦合」的核心词"
+          },
+          {
+            "id": "coupling-4a",
+            "kind": "co-occur",
+            "terms": [
+              "valorization",
+              "H2O2"
+            ],
+            "note": "「把底物变成有价值产物」——这正是判「真耦合」的核心词"
+          },
+          {
+            "id": "coupling-4b",
+            "kind": "co-occur",
+            "terms": [
+              "valorization",
+              "H 2 O 2"
+            ],
+            "note": "「把底物变成有价值产物」——这正是判「真耦合」的核心词"
           },
           {
             "id": "exclusion",

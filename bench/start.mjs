@@ -74,6 +74,11 @@ const POLARITY = splitList(argValue('--polarity', '')).length
 // 它们和 polarity 一样是 note 判据——只提供证据，不参与判定。
 const NOTE_TERMS = PACK_DECL.noteTerms ?? [];
 
+// 耦合短语：来自领域规则（rules.md 第三节的原文用词），不是统计出来的。
+// 它们要和对象词组成**共现**判据——「H2O2 … coupled with X」同句才算真耦合声明。
+const COUPLING_PHRASES = PACK_DECL.couplingPhrases ?? [];
+const OBJECT_TERMS = PACK_DECL.object?.terms ?? [];
+
 const DATE_WINDOW = (() => {
   const since = argValue('--since', '');
   const until = argValue('--until', '');
@@ -344,6 +349,17 @@ async function main() {
       note: `「${pair.terms[0]}」和「${pair.terms[1]}」在你 ${pair.positiveCount} 篇正例的同一句里一起出现，反例里从来没有过`,
       sample: pair.sample,
     })),
+    // 领域耦合短语 × 对象词，同句出现才算。
+    // 这条补的是「词频和统计共现都看不见」的东西：论文自己声明了耦合，但用的词
+    // 跟种子里那些篇不重合（coupled with / concurrent / valorization）。
+    ...COUPLING_PHRASES.flatMap((entry, i) =>
+      OBJECT_TERMS.map((obj, j) => ({
+        id: `coupling-${i + 1}${j ? String.fromCharCode(96 + j) : ''}`,
+        kind: 'co-occur',
+        terms: [entry.term, obj],
+        note: entry.why ?? '',
+      })),
+    ),
     ...(negMarkers.length
       ? [{ id: 'exclusion', kind: 'absent', terms: negMarkers.slice(0, 4).map((t) => t.term), note: '只出现在你反例里的说法，出现就意味着「这样可能不算」' }]
       : []),
