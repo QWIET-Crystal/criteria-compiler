@@ -182,6 +182,31 @@ node bench/provenance.mjs --pack cof-h2o2
 
 > 一位使用者说，这句话比他拿到的三个工具加起来有用——他就是在这一句上栽的，而且是他先栽的。
 
+## 耦合短语：论文自己说它耦合了
+
+判据不只能从统计里长。包里可以声明 `couplingPhrases`，它们会和对象词组成**共现**判据（同句出现才算）：
+
+```json
+"couplingPhrases": [
+  { "term": "coupled with",  "why": "最直接的耦合声明；阳性 2/6、池子 9/120" },
+  { "term": "valorization", "why": "把底物变成有价值产物——判「真耦合」的核心词" }
+]
+```
+
+这一条把金集识别从 **2/7 提到 5/7**：原来那四篇「疑似」里三篇现在认得出，因为它们在原文里明说
+`coupled with` / `concurrent` / `valorization`，而这些词在种子几篇里没出现过——统计法永远长不出来。
+
+实测各词的信噪比（阳性 6 篇 / 池子 120 篇）：
+
+```
+coupled with    2/6    9/120   ← 最高
+concurrent      1/6    7/120
+valorization    2/6   14/120
+simultaneous    3/6   44/120   ← 太泛，会被「同时去除污染物」蹭到，已弃用
+```
+
+细节与两次踩坑见 `docs/coupling-phrases.md`。
+
 ## 提示项：判据说「算」，顺便告诉你该看哪一眼
 
 `pack.json` 里可以声明 `noteTerms`，它们生成 `note` 判据——**只给证据，不参与判定**：
