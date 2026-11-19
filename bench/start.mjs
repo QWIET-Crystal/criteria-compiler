@@ -52,6 +52,8 @@ const PICK = Math.max(10, Math.min(100, Number(argValue('--pick', '50')) || 50))
 //
 // 声明在 pack.json 的 noiseTerms / polarityTerms 里；CLI 可以覆盖：
 //   --noise "photosynthesis,production rate"  --polarity "sacrificial"
+const HAS_FLAG = (name) => argv.includes(name);
+
 const PACK_DECL = (() => {
   const file = path.join(ROOT, 'packs', ID, 'pack.json');
   if (!fs.existsSync(file)) return {};
@@ -67,6 +69,10 @@ const NOISE = splitList(argValue('--noise', '')).length
 const POLARITY = splitList(argValue('--polarity', '')).length
   ? splitList(argValue('--polarity', ''))
   : (PACK_DECL.polarityTerms ?? []).map((t) => t.term);
+
+// 提示项：声明在 pack.json 的 noteTerms 里。
+// 它们和 polarity 一样是 note 判据——只提供证据，不参与判定。
+const NOTE_TERMS = PACK_DECL.noteTerms ?? [];
 
 const DATE_WINDOW = (() => {
   const since = argValue('--since', '');
@@ -85,7 +91,7 @@ if (POS.length < 2) fail('至少给 2 篇你认的论文 —— 一篇不足以�
 
 function fail(message) {
   console.error(`\n${message}\n`);
-  console.error('用法：node bench/start.mjs --id <名字> --want "<一句话>" --pos doi1,doi2 [--neg doi3,doi4]');
+  console.error('用法：node bench/start.mjs --id <名字> --want "<一句话>" --pos doi1,doi2 [--neg doi3,doi4] [--into]');
   process.exit(1);
 }
 
@@ -253,8 +259,10 @@ function rankBoundary(works, criteria, known = new Set()) {
 // ── main ────────────────────────────────────────────────────────────────────
 async function main() {
   const outDir = path.join(ROOT, 'packs', ID);
-  if (fs.existsSync(path.join(outDir, 'pack.json'))) {
-    fail(`packs/${ID} 已经存在。换一个 --id，或先把旧包挪走。`);
+  // 已有包默认不覆盖——起草会重写 draft / 队列 / 变更史，静默盖掉等于毁掉别人的工作。
+  // 要重新起草一个已有包，必须显式说 --into。
+  if (fs.existsSync(path.join(outDir, 'pack.json')) && !HAS_FLAG('--into')) {
+    fail(`packs/${ID} 已经存在。换一个 --id，或加 --into 表示「我知道，重新起草这个包」。`);
   }
 
   console.log(`\n学生版 · 从一句话到一个可改的判据草案`);
@@ -339,6 +347,14 @@ async function main() {
     ...(negMarkers.length
       ? [{ id: 'exclusion', kind: 'absent', terms: negMarkers.slice(0, 4).map((t) => t.term), note: '只出现在你反例里的说法，出现就意味着「这样可能不算」' }]
       : []),
+    // 领域提示项：声明在包里，只给证据。
+    // 每条都要有 why——不从数据里长出来的词，没资格进判据。
+    ...NOTE_TERMS.filter((t) => t.id && Array.isArray(t.terms) && t.terms.length).map((t) => ({
+      id: `note-${t.id}`,
+      kind: 'note',
+      terms: t.terms,
+      note: t.label ? `${t.label}：${t.why ?? ''}`.trim() : (t.why ?? ''),
+    })),
     // 极性提示：只给证据，不改判定。
     //
     // 一开始写成排除项，实测立刻把金集阳性 10.1021/jacs.6c00731 判成了不算——

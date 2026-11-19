@@ -147,8 +147,14 @@ export function evaluate(criteria, text, parts = {}) {
         }
       }
       const parts = [];
-      if (plain.length) parts.push(`以肯定形式出现 ${plain.length} 处（需人工判断）`);
-      if (negated.length) parts.push(`以否定形式出现 ${negated.length} 处（正面信号）`);
+      if (criterion.negationAware) {
+        // 只有开了否定感知，才分「肯定形式 / 否定形式」。
+        if (plain.length) parts.push(`以肯定形式出现 ${plain.length} 处（需人工判断）`);
+        if (negated.length) parts.push(`以否定形式出现 ${negated.length} 处（正面信号）`);
+      } else {
+        // 一般的提示项没有极性，别硬套「肯定形式」这种说法。
+        if (plain.length) parts.push(`出现 ${plain.length} 处`);
+      }
       return {
         id, kind, matched: true, informational: true,
         evidence: [...negated, ...plain].slice(0, 4),

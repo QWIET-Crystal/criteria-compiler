@@ -205,7 +205,12 @@ async function main() {
         if (criterion?.kind === 'co-occur') console.log(`       「${criterion.terms.join('」与「')}」同句出现`);
         else if (criterion?.kind === 'any') console.log(`       ${criterion.terms.slice(0, 4).join('、')}… 任一出现`);
       }
-      for (const row of members.slice(0, 3)) console.log(`       · ${row.doi}  ${(row.title ?? '').slice(0, 60)}`);
+      for (const row of members.slice(0, 3)) {
+        const decided = decide(textOf(row.doi), partsOf(row.doi));
+        const hints = decided.results.filter((r) => r.kind === 'note' && r.evidence.length).map((r) => (r.note ?? r.id).split('：')[0]);
+        const hintText = hints.length ? `  〔看：${hints.join('、')}〕` : '';
+        console.log(`       · ${row.doi}  ${(row.title ?? '').slice(0, 55)}${hintText}`);
+      }
       if (members.length > 3) console.log(`       …还有 ${members.length - 3} 篇`);
       console.log('');
     });
@@ -232,6 +237,11 @@ async function main() {
         const co = item.decided.results.find((r) => r.kind === 'co-occur' && r.matched);
         console.log(`  · ${item.row.doi}  ${(item.row.title ?? '').slice(0, 70)}`);
         if (co) console.log(`      共现证据：${co.evidence.map((e) => `「${e.quote}」`).join(' 与 ')}`);
+        // 提示项：不改变判定，只告诉人「读之前该知道什么」。
+        for (const hint of item.decided.results.filter((r) => r.kind === 'note' && r.evidence.length)) {
+          const label = (hint.note ?? hint.id).split('：')[0];
+          console.log(`      看一眼｜${label}：${hint.reason}`);
+        }
       }
       if (positives.length > 8) console.log(`  …还有 ${positives.length - 8} 篇`);
     }

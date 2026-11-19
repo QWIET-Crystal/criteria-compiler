@@ -1,0 +1,382 @@
+{
+  "pack": "cof-h2o2",
+  "want": "COF 光催化里真正同时发生的水氧化与双氧水生成",
+  "examples": {
+    "positive": [
+      "10.1002/adfm.202510257",
+      "10.1021/jacs.6c00731",
+      "10.1002/adfm.202316773"
+    ],
+    "negative": [
+      "10.1016/j.apcatb.2026.127309"
+    ]
+  },
+  "searchTerms": [
+    "charge",
+    "production rate",
+    "intramolecular",
+    "asymmetric",
+    "photosynthesis",
+    "alcohol",
+    "sacrificial",
+    "acceptor"
+  ],
+  "mustHave": [
+    {
+      "term": "charge",
+      "inPositives": 3,
+      "poolFrequency": 0.146
+    },
+    {
+      "term": "intramolecular",
+      "inPositives": 2,
+      "poolFrequency": 0.007
+    },
+    {
+      "term": "asymmetric",
+      "inPositives": 2,
+      "poolFrequency": 0.014
+    },
+    {
+      "term": "alcohol",
+      "inPositives": 2,
+      "poolFrequency": 0.024
+    },
+    {
+      "term": "acceptor",
+      "inPositives": 2,
+      "poolFrequency": 0.031
+    },
+    {
+      "term": "donor",
+      "inPositives": 2,
+      "poolFrequency": 0.031
+    },
+    {
+      "term": "aerobic oxidation",
+      "inPositives": 2,
+      "poolFrequency": 0.035
+    },
+    {
+      "term": "limited",
+      "inPositives": 2,
+      "poolFrequency": 0.035
+    },
+    {
+      "term": "aerobic",
+      "inPositives": 2,
+      "poolFrequency": 0.042
+    },
+    {
+      "term": "redox",
+      "inPositives": 2,
+      "poolFrequency": 0.045
+    },
+    {
+      "term": "yield",
+      "inPositives": 2,
+      "poolFrequency": 0.052
+    }
+  ],
+  "mustNot": [
+    "high-yield electrocatalytic",
+    "electrocatalytic production",
+    "zeolite-loaded dual-atom",
+    "phenol hydroxylation",
+    "dual-atom catalysts",
+    "catalysts coupled",
+    "electrocatalytic",
+    "zeolite-loaded"
+  ],
+  "criteria": [
+    {
+      "id": "core-any",
+      "kind": "any",
+      "terms": [
+        "charge",
+        "intramolecular",
+        "asymmetric",
+        "alcohol",
+        "acceptor",
+        "donor",
+        "aerobic oxidation",
+        "limited"
+      ],
+      "note": "区分词，任一说法的出现就算接触到了主题"
+    },
+    {
+      "id": "co-1",
+      "kind": "co-occur",
+      "terms": [
+        "asymmetric",
+        "photosynthesis"
+      ],
+      "note": "「asymmetric」和「photosynthesis」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+      "sample": "Extending Asymmetric π-Conjugation of Vinylene-Linked Covalent Organic Frameworks with Remodeled Redox Active Sites for H 2 O 2 Photosynthesis and Aerobic Oxidations."
+    },
+    {
+      "id": "co-2",
+      "kind": "co-occur",
+      "terms": [
+        "aerobic oxidation",
+        "asymmetric"
+      ],
+      "note": "「aerobic oxidation」和「asymmetric」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+      "sample": "To address these challenges, we report the design of a vinylene-linked sp 2 -COF by introducing an electron-withdrawing and polar –CN group (sp 2 -COF-CN) to extend asymmetric π-conjugation and remode"
+    },
+    {
+      "id": "co-3",
+      "kind": "co-occur",
+      "terms": [
+        "aerobic",
+        "asymmetric"
+      ],
+      "note": "「aerobic」和「asymmetric」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+      "sample": "Extending Asymmetric π-Conjugation of Vinylene-Linked Covalent Organic Frameworks with Remodeled Redox Active Sites for H 2 O 2 Photosynthesis and Aerobic Oxidations."
+    },
+    {
+      "id": "co-4",
+      "kind": "co-occur",
+      "terms": [
+        "aerobic oxidation",
+        "photosynthesis"
+      ],
+      "note": "「aerobic oxidation」和「photosynthesis」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+      "sample": "To address these challenges, we report the design of a vinylene-linked sp 2 -COF by introducing an electron-withdrawing and polar –CN group (sp 2 -COF-CN) to extend asymmetric π-conjugation and remode"
+    },
+    {
+      "id": "co-5",
+      "kind": "co-occur",
+      "terms": [
+        "aerobic",
+        "photosynthesis"
+      ],
+      "note": "「aerobic」和「photosynthesis」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+      "sample": "Extending Asymmetric π-Conjugation of Vinylene-Linked Covalent Organic Frameworks with Remodeled Redox Active Sites for H 2 O 2 Photosynthesis and Aerobic Oxidations."
+    },
+    {
+      "id": "co-6",
+      "kind": "co-occur",
+      "terms": [
+        "aerobic oxidation",
+        "alcohol"
+      ],
+      "note": "「aerobic oxidation」和「alcohol」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+      "sample": "Furthermore, sp 2 -COF-CN demonstrates high efficiency in diverse aerobic oxidation reactions, including the oxidation of furfuryl alcohol in water and the benzylamine- and thiophenol-based coupling r"
+    },
+    {
+      "id": "exclusion",
+      "kind": "absent",
+      "terms": [
+        "high-yield electrocatalytic",
+        "electrocatalytic production",
+        "zeolite-loaded dual-atom",
+        "phenol hydroxylation"
+      ],
+      "note": "只出现在你反例里的说法，出现就意味着「这样可能不算」"
+    },
+    {
+      "id": "note-in-situ",
+      "kind": "note",
+      "terms": [
+        "in situ",
+        "operando"
+      ],
+      "note": "原位 / operando 表征：阳性 3/6 出现、池子 52%。读这篇之前值得知道它有没有实况证据——决定它是「推测机理」还是「看见中间体」。"
+    },
+    {
+      "id": "note-quant",
+      "kind": "note",
+      "terms": [
+        "mmol g",
+        "μmol g",
+        "umol g",
+        "apparent quantum"
+      ],
+      "note": "定量产率数据：阳性 5/6 出现、池子 50%。没有定量数据的「高性能」不适合当综述里的证据。"
+    },
+    {
+      "id": "polarity",
+      "kind": "note",
+      "negationAware": true,
+      "terms": [
+        "sacrificial"
+      ],
+      "note": "双向词：否定形式（without / -free）是正面信号，肯定形式需要人看一眼它有没有同时产出有价值的东西。它不参与判定。"
+    }
+  ],
+  "checks": [
+    {
+      "id": "core-terms",
+      "pattern": "charge|intramolecular|asymmetric|alcohol|acceptor|donor|aerobic oxidation|limited",
+      "note": "这 8 个词在你 3 篇正例里反复出现，而在同领域 287 篇背景论文里很少见。先看它们是不是「本来就应该对」的同义说法——是，就进槽位；只是几篇的巧合，就删掉。",
+      "source": "从正例里长出来，再用背景池过滤"
+    },
+    {
+      "id": "negative-marker",
+      "pattern": "high-yield electrocatalytic|electrocatalytic production|zeolite-loaded dual-atom|phenol hydroxylation",
+      "note": "这 4 个词只出现在你的反例里。它们可能是「这样就不算」的信号，也可能只是那几篇的巧合——这一条最容易错，请重点看。",
+      "source": "从反例里长出来的"
+    }
+  ],
+  "openQuestions": [
+    "27 个候选词在背景池里太常见、已自动丢弃（例如 photocatalysts、synthesis、reactions）。如果有你眼里的关键术语被丢了，说明它喊得不够响——那本身就是个信息。",
+    "3 个词按声明被排除在判定之外：production rate、photosynthesis、sacrificial。它们在正例和同领域背景里一样常见（lift≈1），当证据只会放大误报；它们仍参与拼查询。",
+    "极性词 sacrificial 已做成「只提示」判据：它不参与判定，只把「有没有用牺牲剂」摆给你看。要不要因此判不算，取决于它有没有同时产出有价值的东西——这个判断机器做不了。",
+    "槽位怎么切，脚本不替你决定。下面这几篇边界论文标完，再回来定。"
+  ],
+  "history": [
+    {
+      "version": 1,
+      "at": "2026-11-19T05:00:22.025Z",
+      "by": "start.mjs",
+      "what": "起草",
+      "why": "来自 3 篇正例、1 篇反例；11 个区分词",
+      "diff": {
+        "initial": true
+      },
+      "snapshot": {
+        "criteria": [
+          {
+            "id": "core-any",
+            "kind": "any",
+            "terms": [
+              "charge",
+              "intramolecular",
+              "asymmetric",
+              "alcohol",
+              "acceptor",
+              "donor",
+              "aerobic oxidation",
+              "limited"
+            ],
+            "note": "区分词，任一说法的出现就算接触到了主题"
+          },
+          {
+            "id": "co-1",
+            "kind": "co-occur",
+            "terms": [
+              "asymmetric",
+              "photosynthesis"
+            ],
+            "note": "「asymmetric」和「photosynthesis」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+            "sample": "Extending Asymmetric π-Conjugation of Vinylene-Linked Covalent Organic Frameworks with Remodeled Redox Active Sites for H 2 O 2 Photosynthesis and Aerobic Oxidations."
+          },
+          {
+            "id": "co-2",
+            "kind": "co-occur",
+            "terms": [
+              "aerobic oxidation",
+              "asymmetric"
+            ],
+            "note": "「aerobic oxidation」和「asymmetric」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+            "sample": "To address these challenges, we report the design of a vinylene-linked sp 2 -COF by introducing an electron-withdrawing and polar –CN group (sp 2 -COF-CN) to extend asymmetric π-conjugation and remode"
+          },
+          {
+            "id": "co-3",
+            "kind": "co-occur",
+            "terms": [
+              "aerobic",
+              "asymmetric"
+            ],
+            "note": "「aerobic」和「asymmetric」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+            "sample": "Extending Asymmetric π-Conjugation of Vinylene-Linked Covalent Organic Frameworks with Remodeled Redox Active Sites for H 2 O 2 Photosynthesis and Aerobic Oxidations."
+          },
+          {
+            "id": "co-4",
+            "kind": "co-occur",
+            "terms": [
+              "aerobic oxidation",
+              "photosynthesis"
+            ],
+            "note": "「aerobic oxidation」和「photosynthesis」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+            "sample": "To address these challenges, we report the design of a vinylene-linked sp 2 -COF by introducing an electron-withdrawing and polar –CN group (sp 2 -COF-CN) to extend asymmetric π-conjugation and remode"
+          },
+          {
+            "id": "co-5",
+            "kind": "co-occur",
+            "terms": [
+              "aerobic",
+              "photosynthesis"
+            ],
+            "note": "「aerobic」和「photosynthesis」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+            "sample": "Extending Asymmetric π-Conjugation of Vinylene-Linked Covalent Organic Frameworks with Remodeled Redox Active Sites for H 2 O 2 Photosynthesis and Aerobic Oxidations."
+          },
+          {
+            "id": "co-6",
+            "kind": "co-occur",
+            "terms": [
+              "aerobic oxidation",
+              "alcohol"
+            ],
+            "note": "「aerobic oxidation」和「alcohol」在你 2 篇正例的同一句里一起出现，反例里从来没有过",
+            "sample": "Furthermore, sp 2 -COF-CN demonstrates high efficiency in diverse aerobic oxidation reactions, including the oxidation of furfuryl alcohol in water and the benzylamine- and thiophenol-based coupling r"
+          },
+          {
+            "id": "exclusion",
+            "kind": "absent",
+            "terms": [
+              "high-yield electrocatalytic",
+              "electrocatalytic production",
+              "zeolite-loaded dual-atom",
+              "phenol hydroxylation"
+            ],
+            "note": "只出现在你反例里的说法，出现就意味着「这样可能不算」"
+          },
+          {
+            "id": "note-in-situ",
+            "kind": "note",
+            "terms": [
+              "in situ",
+              "operando"
+            ],
+            "note": "原位 / operando 表征：阳性 3/6 出现、池子 52%。读这篇之前值得知道它有没有实况证据——决定它是「推测机理」还是「看见中间体」。"
+          },
+          {
+            "id": "note-quant",
+            "kind": "note",
+            "terms": [
+              "mmol g",
+              "μmol g",
+              "umol g",
+              "apparent quantum"
+            ],
+            "note": "定量产率数据：阳性 5/6 出现、池子 50%。没有定量数据的「高性能」不适合当综述里的证据。"
+          },
+          {
+            "id": "polarity",
+            "kind": "note",
+            "negationAware": true,
+            "terms": [
+              "sacrificial"
+            ],
+            "note": "双向词：否定形式（without / -free）是正面信号，肯定形式需要人看一眼它有没有同时产出有价值的东西。它不参与判定。"
+          }
+        ],
+        "mustHave": [
+          "charge",
+          "intramolecular",
+          "asymmetric",
+          "alcohol",
+          "acceptor",
+          "donor",
+          "aerobic oxidation",
+          "limited",
+          "aerobic",
+          "redox",
+          "yield"
+        ],
+        "mustNot": [
+          "high-yield electrocatalytic",
+          "electrocatalytic production",
+          "zeolite-loaded dual-atom",
+          "phenol hydroxylation",
+          "dual-atom catalysts",
+          "catalysts coupled",
+          "electrocatalytic",
+          "zeolite-loaded"
+        ]
+      }
+    }
+  ]
+}

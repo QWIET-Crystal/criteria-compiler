@@ -168,5 +168,28 @@
       "term": "sacrificial",
       "why": "双向词：without sacrificial agent 是好事，sacrificial-agent-triggered 是坏事。实测池子里 33 篇提到它，24 篇否定形式、9 篇肯定形式，lift 因此被抵消到 1.21"
     }
-  ]
+  ],
+  "noteTerms": [
+    {
+      "id": "in-situ",
+      "label": "原位 / operando 表征",
+      "terms": [
+        "in situ",
+        "operando"
+      ],
+      "why": "阳性 3/6 出现、池子 52%。读这篇之前值得知道它有没有实况证据——决定它是「推测机理」还是「看见中间体」。"
+    },
+    {
+      "id": "quant",
+      "label": "定量产率数据",
+      "terms": [
+        "mmol g",
+        "μmol g",
+        "umol g",
+        "apparent quantum"
+      ],
+      "why": "阳性 5/6 出现、池子 50%。没有定量数据的「高性能」不适合当综述里的证据。"
+    }
+  ],
+  "noteTermNotes": "2026-11-19 实测 9 个「值得看一眼」的信号，只有 in-situ(3/6) 与定量产率(5/6) 在阳性里出现；同位素标记、AQY、DFT、三相界面、自由基捕获、循环稳定性、流动反应器都是 0/6。但金集只有 6 篇有摘要，0/6 更可能是样本不足，不是这些信号没价值——等正例攒到 ≥10 篇再复测一次，别拿 6 篇定词表。"
 }
