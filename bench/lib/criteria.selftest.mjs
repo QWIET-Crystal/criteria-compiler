@@ -233,5 +233,36 @@ const TEXT = [
   check('note：否定形式被认出来', /否定形式/.test(r.reason), r.reason);
 }
 
+// ── required：按纳排标准判，而不是按「有没有更强证据」判 ────────────────────
+{
+  // 一篇论文：是 COF，产 H2O2，但摘要没写「耦合」
+  const text = 'A covalent organic framework produced hydrogen peroxide under visible light.';
+  const criteria = [
+    { id: 'material', kind: 'any', terms: ['covalent organic framework'], required: true },
+    { id: 'object', kind: 'any', terms: ['hydrogen peroxide'], required: true },
+    { id: 'coupled', kind: 'co-occur', terms: ['coupled with', 'hydrogen peroxide'] },
+  ];
+  const decided = decide(criteria, text, { title: 't', abstract: text });
+  check('required：两个必要条件都满足就判算，即使没有耦合证据', decided.verdict === '算', decided.verdict);
+  check('required：结果里带出 required 标记', decided.results.every((r) => typeof r.required === 'boolean'));
+
+  // 同一篇，但材料不是 COF
+  const notCof = 'A carbon nitride produced hydrogen peroxide under visible light.';
+  const decided2 = decide(criteria, notCof, { title: 't', abstract: notCof });
+  check('required：只满足一个必要条件 → 疑似', decided2.verdict === '疑似', decided2.verdict);
+
+  // 两个都不满足
+  const neither = 'A review about photocatalysis.';
+  const decided3 = decide(criteria, neither, { title: 't', abstract: neither });
+  check('required：一个都不满足 → 不算', decided3.verdict === '不算', decided3.verdict);
+}
+
+// ── 没有 required 时行为不变 ────────────────────────────────────────────────
+{
+  const text = 'Hydrogen peroxide coupled with alcohol oxidation.';
+  const decided = decide([{ id: 'c', kind: 'co-occur', terms: ['coupled with', 'hydrogen peroxide'] }], text, { title: 't', abstract: text });
+  check('没有 required：仍按耦合证据判算', decided.verdict === '算', decided.verdict);
+}
+
 console.log(`\n${passed} 通过 / ${failed} 失败`);
 process.exit(failed ? 1 : 0);

@@ -79,6 +79,12 @@ const NOTE_TERMS = PACK_DECL.noteTerms ?? [];
 const COUPLING_PHRASES = PACK_DECL.couplingPhrases ?? [];
 const OBJECT_TERMS = PACK_DECL.object?.terms ?? [];
 
+// 材料必要条件：包里 COF 那一维。
+// 为什么单独拎出来：判定原来完全不看「是不是 COF」——那件事是靠检索式做的。
+// 但纳排标准明说「涉及 COF」，而姊妹体系（CMP / PHI / 碳氮 / CdS）的池子里
+// 混着大量非 COF 论文，不显式判就会把范围外的东西算进来。
+const MATERIAL_TERMS = (PACK_DECL.dimensions ?? []).find((d) => d.id === 'COF')?.terms ?? [];
+
 const DATE_WINDOW = (() => {
   const since = argValue('--since', '');
   const until = argValue('--until', '');
@@ -341,6 +347,14 @@ async function main() {
     : [];
 
   const criteria = [
+    // 两个必要条件：纳排标准是「产 H2O2 + 涉及 COF」。
+    // 注意它们和 core-any 的分工：core-any 是「像不像这个题目」，required 是「在不在范围内」。
+    ...(MATERIAL_TERMS.length
+      ? [{ id: 'material', kind: 'any', required: true, terms: MATERIAL_TERMS, note: '必要条件：必须涉及 COF 骨架（姊妹体系不算）' }]
+      : []),
+    ...(OBJECT_TERMS.length
+      ? [{ id: 'object', kind: 'any', required: true, terms: OBJECT_TERMS, note: '必要条件：必须涉及 H2O2（含 H 2 O 2 这种带空格写法）' }]
+      : []),
     { id: 'core-any', kind: 'any', terms: judgeTerms.slice(0, 8), note: '区分词，任一说法的出现就算接触到了主题' },
     ...coPairs.map((pair, i) => ({
       id: `co-${i + 1}`,

@@ -114,13 +114,14 @@ export function evaluate(criteria, text, parts = {}) {
     return [{ text: title, offset: at, raw: title }];
   };
 
-  return (criteria ?? []).map((criterion) => {
+  const evaluated = (criteria ?? []).map((criterion) => {
     const scope = criterion.scope ?? 'any';
     const scoped = sentencesIn(scope);
     const terms = (criterion.terms ?? []).filter(Boolean);
     const id = criterion.id ?? '(unnamed)';
     const kind = criterion.kind ?? 'any';
     const note = criterion.note ?? '';
+    const required = Boolean(criterion.required);
 
     if (!terms.length) {
       return { id, kind, matched: false, evidence: [], note, reason: '判据没有词，视为未命中' };
@@ -240,6 +241,9 @@ export function evaluate(criteria, text, parts = {}) {
         : '都没有出现',
     };
   });
+
+  // 把 required 补到每条结果上（判据定义里有，结果里也必须有，否则调用方看不到）。
+  return evaluated.map((result, i) => ({ ...result, required: Boolean(criteria?.[i]?.required) }));
 }
 
 /**
@@ -275,13 +279,29 @@ export function decide(criteria, text, parts = {}) {
   const strong = coOccur.some((r) => r.matched);
   const weak = positive.length > 0;
 
+  // required：标准要求的必要条件（例如「涉及 COF」「产出 H2O2」）。
+  //
+  // 为什么要有这个：判定规则原来只看「有没有耦合证据」，但课题组定下的纳排标准是
+  // 「产 H2O2 + 涉及 COF」——耦合并不是准入条件，而是分章节的依据。
+  // 两者混在一起，一篇 COF 产 H2O2 但摘要没写「耦合」的论文就会被判成不算，
+  // 那是**拿一个更严的标准去否掉一个只需要宽标准的判断**。
+  //
+  // 给了 required 就按标准判：全满足→算；部分满足→疑似；全不满足→不算。
+  // 没给 required 就退回老行为（看耦合证据），保证旧调用方不受影响。
+  const required = results.filter((r) => r.required);
+  const requiredMet = required.filter((r) => r.matched);
+
   let verdict;
   if (violated) verdict = '不算';
-  else if (strong) verdict = '算';
+  else if (required.length) {
+    if (requiredMet.length === required.length) verdict = '算';
+    else if (requiredMet.length > 0) verdict = '疑似';
+    else verdict = '不算';
+  } else if (strong) verdict = '算';
   else if (weak) verdict = '疑似';
   else verdict = '不算';
 
-  return { verdict, results, violated: Boolean(violated), strong, weak, positive };
+  return { verdict, results, violated: Boolean(violated), strong, weak, positive, required, requiredMet };
 }
 
 /**

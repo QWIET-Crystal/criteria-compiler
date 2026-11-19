@@ -177,22 +177,32 @@ async function criteriaCheck(criteriaPath, pack, positives) {
     if (!text) return { doi, note: row.note ?? '', status: 'no_text', evidence: [], reason: '取不到题录或摘要', cause: causes[doi] ?? null };
 
     // 判定只用 lib 里那一份，不在这里重写。
-    const decided = decideRule(criteria, text, { title: work.title, abstract: work.abstract });
-    const { violated, strong, weak } = decided;
+    const d = decideRule(criteria, text, { title: work.title, abstract: work.abstract });
+    const { violated, strong, weak } = d;
     // decide() 里的 violated 是布尔值；要拿证据得回去找那条判据本身。
-    const violatedCriterion = decided.results.find((r) => r.kind === 'absent' && !r.matched) ?? null;
+    const violatedCriterion = d.results.find((r) => r.kind === 'absent' && !r.matched) ?? null;
     const said = !violated && (strong || weak);
 
     return {
       doi,
       note: row.note ?? '',
-      status: !violated && strong ? 'recognized' : !violated && weak ? 'weak' : 'missed',
+      // 按 decide() 的 verdict 走，不要在这里重新算一遍「算/疑似」。
+      // 原来这里写的是 `!violated && strong ? recognized : ...`——它绕过了 verdict，
+      // 于是加了 required 之后判据已经说「算」，账本还按旧的耦合证据说「疑似」。
+      // 两份规则各自演化，这就是上次「判定规则写了 5 份」那类事故的复发。
+      status: d.verdict === '算' ? 'recognized' : d.verdict === '疑似' ? 'weak' : 'missed',
       cause: causes[doi] ?? null,
       violated: Boolean(violated),
-      evidence: decided.results.filter(isPositiveResult).flatMap((r) => r.evidence.slice(0, 1)),
+      evidence: d.results.filter(isPositiveResult).flatMap((r) => r.evidence.slice(0, 1)),
+      // 理由要和判定依据对得上。原来只认「共现命中」，于是按必要条件判「算」的论文
+      // 会显示成「只有泛词命中」——结论对、理由错，比两个都错更难发现。
       reason: violated
         ? `踩到排除信号「${violatedCriterion?.evidence?.[0]?.quote ?? '?'}」（${violatedCriterion?.id ?? '?'}）`
-        : strong ? '共现判据命中' : weak ? '只有泛词命中，没有共现证据' : '没有任何正向判据命中',
+        : d.requiredMet?.length === d.required?.length && d.required?.length
+          ? strong
+            ? `必要条件都满足（${d.required.map((r) => r.id).join('+')}），且有共现证据`
+            : `必要条件都满足（${d.required.map((r) => r.id).join('+')}），但摘要里没找到耦合原句`
+          : weak ? '只满足部分必要条件' : '必要条件一条都没满足',
     };
   });
 
@@ -213,7 +223,11 @@ async function criteriaCheck(criteriaPath, pack, positives) {
         })
         .map((quote) => `「${quote}」`)
         .join(' 与 ');
-      console.log(`      认出来了：${quotes || row.reason}`);
+      // 证据和理由都要露出来：
+      // 只说「认出来了」不够——按必要条件认出的（有 COF + H2O2、但摘要没写耦合）
+      // 和按共现认出的，是两件不同强度的事，人得能分辨。
+      console.log(`      依据：${row.reason}`);
+      if (quotes) console.log(`      证据：${quotes}`);
     } else {
       console.log(`      ${row.reason}`);
       if (row.cause) console.log(`      已定原因：${CAUSES[row.cause.cause]?.label ?? row.cause.cause}${row.cause.note ? `——${row.cause.note}` : ''}`);

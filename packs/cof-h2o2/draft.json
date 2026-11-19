@@ -90,6 +90,29 @@
   ],
   "criteria": [
     {
+      "id": "material",
+      "kind": "any",
+      "required": true,
+      "terms": [
+        "covalent organic framework",
+        "COF",
+        "CTF",
+        "covalent organic frameworks"
+      ],
+      "note": "必要条件：必须涉及 COF 骨架（姊妹体系不算）"
+    },
+    {
+      "id": "object",
+      "kind": "any",
+      "required": true,
+      "terms": [
+        "hydrogen peroxide",
+        "H2O2",
+        "H 2 O 2"
+      ],
+      "note": "必要条件：必须涉及 H2O2（含 H 2 O 2 这种带空格写法）"
+    },
+    {
       "id": "core-any",
       "kind": "any",
       "terms": [
@@ -336,7 +359,7 @@
   "history": [
     {
       "version": 1,
-      "at": "2026-11-19T05:04:14.616Z",
+      "at": "2026-11-19T09:14:49.421Z",
       "by": "start.mjs",
       "what": "起草",
       "why": "来自 3 篇正例、1 篇反例；11 个区分词",
@@ -345,6 +368,29 @@
       },
       "snapshot": {
         "criteria": [
+          {
+            "id": "material",
+            "kind": "any",
+            "required": true,
+            "terms": [
+              "covalent organic framework",
+              "COF",
+              "CTF",
+              "covalent organic frameworks"
+            ],
+            "note": "必要条件：必须涉及 COF 骨架（姊妹体系不算）"
+          },
+          {
+            "id": "object",
+            "kind": "any",
+            "required": true,
+            "terms": [
+              "hydrogen peroxide",
+              "H2O2",
+              "H 2 O 2"
+            ],
+            "note": "必要条件：必须涉及 H2O2（含 H 2 O 2 这种带空格写法）"
+          },
           {
             "id": "core-any",
             "kind": "any",

@@ -441,10 +441,24 @@ async function main() {
     const decided = decideRule(next.criteria ?? [], text, parts);
     const hits = decided.results.filter(isPositiveResult).length;
 
+    // 有必要条件时，按「必要条件过没过」分层；没有时退回老的分法。
+    //
+    // 为什么要分开：加了 required 之后，一篇论文可能「必要条件全满足、但没有耦合证据」
+    // ——那它已经算通过了，只是证据薄。再用旧的 strong/weak 打分，它会掉到「疑似」那一档，
+    // 队列顺序就和判定结果对不上了。
+    const hasRequired = (decided.required?.length ?? 0) > 0;
+    const requiredOk = hasRequired && decided.requiredMet.length === decided.required.length;
+    const requiredPartial = hasRequired && decided.requiredMet.length > 0 && !requiredOk;
+
     let score = 0;
     let why = '与当前判据无关';
     if (decided.violated && decided.weak) { score = 5; why = '判据内部打架：有正向命中，但也踩到排除信号'; }
     else if (decided.violated) { score = 1; why = '只踩到排除信号'; }
+    else if (hasRequired) {
+      if (requiredOk && decided.strong) { score = 4; why = '准入条件满足，且有耦合原句'; }
+      else if (requiredOk) { score = 3; why = '准入条件满足，但摘要里没找到耦合原句'; }
+      else if (requiredPartial) { score = 2; why = '只满足部分准入条件（例如提到 H2O2 但不是 COF）'; }
+    }
     else if (decided.strong) { score = 4; why = '共现判据命中——贴着概念边界'; }
     else if (decided.weak) { score = 3; why = '只有泛词命中，没有共现证据——最值得你亲眼看的一批'; }
     return { score, why, hits };
