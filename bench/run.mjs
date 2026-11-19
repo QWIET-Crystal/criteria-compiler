@@ -160,7 +160,7 @@ function parseCsv(text) {
     .map((r) => Object.fromEntries(head.map((h, i) => [h.trim(), (r[i] || '').trim()])));
 }
 
-async function api(url, tries = 3) {
+async function api(url, tries = 6) {
   const cached = cacheRead(url);
   if (cached) return cached;
 
@@ -214,7 +214,8 @@ async function api(url, tries = 3) {
     } catch (err) {
       lastErr = err;
       if (attempt === tries - 1) throw err;
-      await sleep(1500 * (attempt + 1));
+      // 网络抖动与 5xx 都会走到这里。退避要够长：OpenAlex 高峰期一次抖动常常几秒。
+      await sleep(Math.min(2000 * (attempt + 1), 12000));
     } finally {
       clearTimeout(timer);
     }
@@ -539,7 +540,7 @@ async function main() {
   }
 
   if (asJson) {
-    console.log(JSON.stringify({ generatedAt: new Date().toISOString(), cap: CAP, stages: results }, null, 2));
+    console.log(JSON.stringify({ valid: true, generatedAt: new Date().toISOString(), cap: CAP, stages: results }, null, 2));
     return;
   }
 
@@ -571,7 +572,30 @@ async function main() {
       for (const d of last.posMissing) console.log(`  - ${d}`);
     }
   }
+  // ── 完整性校验：失败过就不能当作结果用 ────────────────────────────────────
+  //
+  // 之前这里不看错误：一条查询取不到页，池子就少一截，召回自然变低，
+  // 而输出照样是一张漂亮的表。实测踩过——全部查询都 `request failed`，
+  // 程序仍然打印了 348/598/602 和 7/7。
+  //
+  // 池子不完整 = 数字无效，这条必须是硬失败，不能只是一句提示。
+  const failedQueries = results.flatMap((r) => (r.perQuery ?? []).filter((q) => q.error).map((q) => ({ stage: r.stage, ...q })));
+
   console.log(`\nelapsed: ${((Date.now() - startedAt) / 1000).toFixed(1)}s  (cap ${CAP}/query, timeout ${TIMEOUT_MS}ms)`);
+
+  if (failedQueries.length) {
+    process.stderr.write(`\n!! ${failedQueries.length} 条查询失败，本次数字无效 !!\n`);
+    for (const q of failedQueries.slice(0, 8)) {
+      process.stderr.write(`   ${q.stage}: ${String(q.error).slice(0, 60)} | ${String(q.query).slice(0, 56)}\n`);
+    }
+    process.stderr.write('\n   池子不完整时召回一定偏低，这不是「这个领域文献少」，是请求没成功。\n');
+    process.stderr.write('   多为 OpenAlex 限流（429）或服务端 5xx。重跑即可：成功的页已进缓存，下一轮会接着补。\n');
+    process.stderr.write('   要更稳：设 OPENALEX_API_KEY（免费，额度 10 倍），或加大 --timeout。\n\n');
+    if (asJson) {
+      console.log(JSON.stringify({ valid: false, failedQueries: failedQueries.length, cap: CAP, stages: results }, null, 2));
+    }
+    process.exit(3);
+  }
   if (CROSSREF_FILTERED) {
     console.log(`crossref: ${CROSSREF_FILTERED} record(s) dropped — they did not satisfy every slot`);
   }

@@ -15,9 +15,9 @@ cap per query: 1000
 
 stage                             pool      positives     negatives
 ----------------------------------------------------------------------
-A. COF only                       922       2/7           0/2
-B. six material families          2877      5/7           0/2
-C. six families + 3 fixes         2890      7/7           0/2
+A. COF only                       814       2/7           0/2
+B. six material families          2826      7/7           0/2
+C. six families + 3 fixes         2837      7/7           0/2
 
 elapsed: 51.3s
 ```
@@ -38,7 +38,12 @@ elapsed: 51.3s
 原因是那 5 篇里 4 篇不属于 COF 体系——共轭微孔聚合物、聚庚嗪酰亚胺、碳氮、CdS。
 它们的摘要里不出现任何 COF 字样，靠排序永远捞不回来。
 
-把材料槽扩展成六族并集，覆盖率从 2/7 升到 5/7；再加三条确定性修正，到 7/7。
+把材料槽扩展成六族并集，覆盖率从 **2/7 直接到 7/7**。
+
+> 2026-11-19 更正：早先这条写的是「六族 5/7，再加三条修正到 7/7」。
+> 补上复数变体之后（`"carbon nitrides"`、`"bismuth oxysulfides"`），六族并集自己就够了——
+> 那两篇以前只有修正项能捞到，是因为查询写的是单数、按字面匹配不到复数。
+> **修正项不是召回瓶颈，词形才是。** 三条修正仍然多捞 11 篇，但不再承重。
 
 ## 三条修正（都是被数据打出来的，不是想出来的）
 
@@ -137,6 +142,27 @@ node bench/ledger.mjs --pack cof-h2o2 --cause <doi> <criterion|data|out_of_scope
 
 判据账会按原因分组，并在多数某一类时直接说现在该做什么。原因存 `causes.json`，
 **不进 gold.csv**——原因属于分析过程，不属于金标。
+
+### 时间窗口：能直接写进检索
+
+```json
+{
+  "dateWindow": { "since": "2021-01-01", "until": "2026-12-31" }
+}
+```
+
+放在 `pack.json` 顶层。它会变成 OpenAlex filter 的 `from_publication_date` / `to_publication_date`，
+**不是检索完再筛**。
+
+不给也行，但那时时间只能后处理——校验器会警告，并把这句话写在输出里，
+不让工具假装管了这件事：
+
+```
+warn  my-pack: 没有 dateWindow：检索语句里不带日期，「近三年」只能检索完再筛。
+```
+
+起草阶段也能给：`node bench/start.mjs ... --since 2021-01-01`，
+这个窗口会记进 `provenance.json` 的「按什么筛」。
 
 ## 这份清单从哪来的、按什么筛的
 

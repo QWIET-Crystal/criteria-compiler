@@ -29,9 +29,9 @@ node bench/contradictions.mjs --refresh    # 需要联网，第一次
 **`run.mjs`** —— 三档召回。
 ```
 stage                             pool      positives     negatives
-A. COF only                       924       2/7           0/2
-B. six material families          2882      5/7           0/2
-C. six families + 3 fixes         2896      7/7           0/2
+A. COF only                       814       2/7           0/2
+B. six material families          2826      7/7           0/2
+C. six families + 3 fixes         2837      7/7           0/2
 ```
 👉 重点不是那个 7/7。**重点是 A 段只捞到 2**——同样的金集、同样的库，只是换了个检索维度。这是整个项目唯一一条被数据钉死的结论。
 

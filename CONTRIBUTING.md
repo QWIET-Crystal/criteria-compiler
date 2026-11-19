@@ -11,7 +11,7 @@ and a thin CLI/MCP layer. Most useful contributions are **data**, not features.
 node bench/run.mjs --mailto you@example.com
 ```
 
-如果数字和 README 不一致（比如覆盖率不是 2/7 → 5/7 → 7/7），那是一个有价值的 bug。
+如果数字和 README 不一致（比如覆盖率不是 2/7 → 7/7），那是一个有价值的 bug。
 
 ## 提交金集（最有价值的贡献）
 

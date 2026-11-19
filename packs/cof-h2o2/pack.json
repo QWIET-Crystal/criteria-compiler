@@ -3,48 +3,75 @@
   "title": "COF photocatalysis: H2O2 production coupled with organic transformation",
   "version": "1.0.0",
   "description": "Literature screening for a review on COF (and sibling frameworks) that produce H2O2 photocatalytically while converting an organic substrate.",
-
   "object": {
     "id": "h2o2",
-    "terms": ["hydrogen peroxide", "H2O2"],
+    "terms": [
+      "hydrogen peroxide",
+      "H2O2"
+    ],
     "note": "The product slot. Every dimension query is ANDed with this."
   },
-
   "dimensions": [
     {
       "id": "COF",
-      "terms": ["covalent organic framework", "COF", "CTF"],
+      "terms": [
+        "covalent organic framework",
+        "COF",
+        "CTF",
+        "covalent organic frameworks"
+      ],
       "scope": "COF",
       "note": "CTF is counted inside COF by this review's convention, but must be flagged in notes."
     },
     {
       "id": "CMP",
-      "terms": ["conjugated microporous polymer"],
+      "terms": [
+        "conjugated microporous polymer",
+        "conjugated microporous polymers"
+      ],
       "scope": "sibling",
       "note": "The acronym CMP alone is ambiguous (chemical mechanical polishing), so only the full phrase is queried."
     },
     {
       "id": "PHI",
-      "terms": ["heptazine imide", "poly(heptazine imide)"],
+      "terms": [
+        "heptazine imide",
+        "poly(heptazine imide)",
+        "heptazine imides"
+      ],
       "scope": "sibling"
     },
     {
       "id": "CN",
-      "terms": ["carbon nitride", "C3N4", "polymeric carbon nitride"],
+      "terms": [
+        "carbon nitride",
+        "C3N4",
+        "polymeric carbon nitride",
+        "carbon nitrides",
+        "polymeric carbon nitrides"
+      ],
       "scope": "sibling"
     },
     {
       "id": "CdS",
-      "terms": ["cadmium sulfide", "CdS"],
+      "terms": [
+        "cadmium sulfide",
+        "CdS",
+        "cadmium sulfides"
+      ],
       "scope": "sibling"
     },
     {
       "id": "Bi",
-      "terms": ["Bi2O2S", "bismuth oxysulfide", "CuInS2"],
+      "terms": [
+        "Bi2O2S",
+        "bismuth oxysulfide",
+        "CuInS2",
+        "bismuth oxysulfides"
+      ],
       "scope": "sibling"
     }
   ],
-
   "extraQueries": [
     {
       "id": "spaced-formula",
@@ -57,13 +84,37 @@
       "query": "(\"carbon nitride\" OR C3N4) AND methane AND ethanol"
     }
   ],
-
   "stages": [
-    { "id": "A", "label": "COF only", "dimensions": ["COF"], "extraQueries": [], "doiFallback": false },
-    { "id": "B", "label": "six material families", "dimensions": ["*"], "extraQueries": [], "doiFallback": false },
-    { "id": "C", "label": "six families + 3 fixes", "dimensions": ["*"], "extraQueries": ["*"], "doiFallback": true }
+    {
+      "id": "A",
+      "label": "COF only",
+      "dimensions": [
+        "COF"
+      ],
+      "extraQueries": [],
+      "doiFallback": false
+    },
+    {
+      "id": "B",
+      "label": "six material families",
+      "dimensions": [
+        "*"
+      ],
+      "extraQueries": [],
+      "doiFallback": false
+    },
+    {
+      "id": "C",
+      "label": "six families + 3 fixes",
+      "dimensions": [
+        "*"
+      ],
+      "extraQueries": [
+        "*"
+      ],
+      "doiFallback": true
+    }
   ],
-
   "checks": [
     {
       "id": "sacrificial-agent",
@@ -86,15 +137,18 @@
       "note": "names a step sequence and then consumes H2O2 downstream; may be a cascade rather than a coupled system. Deliberately narrow: it only catches abstracts that say 'step' — a cascade that never says so is indistinguishable from coupling here"
     }
   ],
-
-  "gold": "gold.csv",  "evaluation": {
+  "gold": "gold.csv",
+  "evaluation": {
     "positive": 2,
     "partial": 1,
     "negative": 0,
     "positiveField": "label"
   },
-
   "output": {
     "scopeDirective": "Coverage is reported on scope=COF only; sibling systems and composites are discussed but never counted into the COF denominator."
-  }
+  },
+  "pluralExempt": [
+    "hydrogen peroxide",
+    "H2O2"
+  ]
 }

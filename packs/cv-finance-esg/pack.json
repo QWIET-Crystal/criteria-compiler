@@ -3,7 +3,6 @@
   "title": "Computer vision / pattern recognition applied to ESG and finance",
   "version": "0.1.0",
   "description": "Retrieval pack for a review on vision-based methods used on ESG, sustainability and financial documents. No human-labelled gold set yet, so this pack is retrieval-only: it can search but must not claim coverage.",
-
   "slots": [
     {
       "id": "application",
@@ -16,7 +15,11 @@
         "climate disclosure",
         "financial statement",
         "annual report",
-        "credit risk"
+        "credit risk",
+        "annual reports",
+        "credit risks",
+        "sustainability reports",
+        "climate disclosures"
       ],
       "note": "The application side. Every candidate must be about money, disclosure or sustainability — not vision in general."
     },
@@ -31,49 +34,82 @@
         "document image analysis",
         "image segmentation",
         "remote sensing image",
-        "vision-language model"
+        "vision-language model",
+        "convolutional neural networks",
+        "vision transformers",
+        "vision-language models"
       ],
       "note": "Deliberately visual-only. First draft used 'pattern recognition' and 'remote sensing', which matched any ML paper and any report mentioning satellites; the pool was mostly non-vision work."
     }
   ],
-
   "dimensions": [
     {
       "id": "DISCLOSURE",
-      "terms": ["ESG disclosure", "ESG rating", "sustainability disclosure", "greenwashing"],
+      "terms": [
+        "ESG disclosure",
+        "ESG rating",
+        "sustainability disclosure",
+        "greenwashing",
+        "ESG disclosures",
+        "ESG ratings",
+        "sustainability disclosures"
+      ],
       "scope": "task",
       "note": "Text+layout of reports; the vision contribution is usually document parsing."
     },
     {
       "id": "CLIMATE",
-      "terms": ["satellite imagery", "earth observation", "emissions estimation", "climate risk"],
+      "terms": [
+        "satellite imagery",
+        "earth observation",
+        "emissions estimation",
+        "climate risk",
+        "earth observations",
+        "climate risks"
+      ],
       "scope": "task",
       "note": "Remote sensing for environmental metrics; the finance link is the asset or portfolio being measured."
     },
     {
       "id": "FINDOCS",
-      "terms": ["table extraction", "document layout analysis", "invoice", "receipt"],
+      "terms": [
+        "table extraction",
+        "document layout analysis",
+        "invoice",
+        "receipt"
+      ],
       "scope": "task"
     },
     {
       "id": "CHARTS",
-      "terms": ["chart understanding", "chart question answering", "figure extraction"],
+      "terms": [
+        "chart understanding",
+        "chart question answering",
+        "figure extraction"
+      ],
       "scope": "task",
       "note": "Financial charts in reports; a genuinely different reading task from tables."
     },
     {
       "id": "CREDIT",
-      "terms": ["credit scoring", "default prediction", "loan assessment"],
+      "terms": [
+        "credit scoring",
+        "default prediction",
+        "loan assessment"
+      ],
       "scope": "task",
       "note": "Often tabular, not visual. Expect low vision yield — that is information, not a failure."
     },
     {
       "id": "FRAUD",
-      "terms": ["fraud detection", "forensic accounting", "document forgery"],
+      "terms": [
+        "fraud detection",
+        "forensic accounting",
+        "document forgery"
+      ],
       "scope": "task"
     }
   ],
-
   "extraQueries": [
     {
       "id": "no-acronym-only",
@@ -81,17 +117,61 @@
       "query": "(\"ESG\" AND (report OR rating OR disclosure)) AND (\"computer vision\" OR \"pattern recognition\" OR OCR OR \"document understanding\")"
     }
   ],
-
   "stages": [
-    { "id": "A", "label": "disclosure axis only", "dimensions": ["DISCLOSURE"], "extraQueries": [], "doiFallback": false },
-    { "id": "B", "label": "all task axes", "dimensions": ["*"], "extraQueries": [], "doiFallback": false },
-    { "id": "C", "label": "all axes + acronym fix", "dimensions": ["*"], "extraQueries": ["*"], "doiFallback": false }
+    {
+      "id": "A",
+      "label": "disclosure axis only",
+      "dimensions": [
+        "DISCLOSURE"
+      ],
+      "extraQueries": [],
+      "doiFallback": false
+    },
+    {
+      "id": "B",
+      "label": "all task axes",
+      "dimensions": [
+        "*"
+      ],
+      "extraQueries": [],
+      "doiFallback": false
+    },
+    {
+      "id": "C",
+      "label": "all axes + acronym fix",
+      "dimensions": [
+        "*"
+      ],
+      "extraQueries": [
+        "*"
+      ],
+      "doiFallback": false
+    }
   ],
-
   "gold": null,
-  "evaluation": { "positive": 2, "partial": 1, "negative": 0, "positiveField": "label" },
-
+  "evaluation": {
+    "positive": 2,
+    "partial": 1,
+    "negative": 0,
+    "positiveField": "label"
+  },
   "output": {
     "scopeDirective": "No gold set: report pool sizes and per-axis yield only. Do not compute coverage, precision or any percentage."
-  }
+  },
+  "pluralExempt": [
+    "satellite imagery",
+    "emissions estimation",
+    "table extraction",
+    "document layout analysis",
+    "chart understanding",
+    "chart question answering",
+    "figure extraction",
+    "credit scoring",
+    "default prediction",
+    "loan assessment",
+    "fraud detection",
+    "forensic accounting",
+    "document forgery",
+    "greenwashing"
+  ]
 }

@@ -73,9 +73,13 @@ function pluralOf(word) {
   // 39 条警告等于没有警告——噪音会把真正的坑淹掉。
   if (/(ing|tion|sion|ment|ity|ness|ship|ance|ence|age|ery|ics|ism|ology)$/.test(w)) return null;
 
+  // 「已经是复数」必须先判断，再谈怎么变复数。
+  // 顺序反了的话，disclosures 会被当成单数变成 disclosureses——
+  // 校验器自己犯它要防的错。
+  if (/s$/.test(w)) return null;
+
   if (/[^aeiou]y$/.test(w)) return `${w.slice(0, -1)}ies`;
-  if (/(s|x|z|ch|sh)$/.test(w)) return `${w}es`;
-  if (/s$/.test(w)) return null;                  // 已经像复数了
+  if (/(x|z|ch|sh)$/.test(w)) return `${w}es`;
   return `${w}s`;
 }
 
@@ -96,7 +100,10 @@ function phrasalWarnings(pack, name, terms, where) {
     const plural = pluralOf(last);
     if (!plural) continue;
     const variant = [...words.slice(0, -1), plural].join(' ');
-    if (terms.some((t) => String(t).toLowerCase() === variant)) continue;
+    // 两边都要小写再比。只小写一边的话，"ESG disclosures" 永远匹配不上 "ESG disclosure" 的建议，
+    // 校验器会对已经补好的词继续报警——报久了就没人看了。
+    const variantLower = variant.toLowerCase();
+    if (terms.some((t) => String(t).toLowerCase() === variantLower)) continue;
     warn(
       name,
       `${where} 的 "${text}" 只有单数。加引号后按字面匹配，${plural} 找不到——` +
@@ -173,7 +180,7 @@ for (const dir of listPacks(process.argv.slice(2))) {
   // 豁免列表本身也要校验：写了个不存在的词，等于给自己开了个空头免责声明。
   for (const item of pack.pluralExempt ?? []) {
     const text = String(item).toLowerCase();
-    const usedSomewhere = [SLOTS.flatMap((s2) => s2.terms ?? []), dims.flatMap((d) => d.terms ?? []), extras.map((e) => e.query ?? '')]
+    const usedSomewhere = [slots.flatMap((s2) => s2.terms ?? []), dims.flatMap((d) => d.terms ?? []), extras.map((e) => e.query ?? '')]
       .flat()
       .some((t) => String(t).toLowerCase().includes(text));
     if (!usedSomewhere) warn(name, `pluralExempt 里的 "${item}" 在包里根本没出现，删掉它`);

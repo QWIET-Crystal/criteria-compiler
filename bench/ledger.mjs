@@ -80,7 +80,7 @@ function workUrl(search, page, perPage = PER_PAGE) {
     filter: `title_and_abstract.search:${search}`,
     'per-page': String(Math.min(perPage, 100)),
     page: String(page),
-    select: 'doi,title,publication_year,cited_by_count',
+    select: 'doi,title,publication_year,cited_by_count,type',
   });
   if (MAILTO) params.set('mailto', MAILTO);
   if (API_KEY) params.set('api_key', API_KEY);
@@ -107,13 +107,15 @@ async function hitsOf(query) {
   const keys = new Set();
   let total = 0;
   try {
+    // 与 run.mjs 同一套类型过滤：peer-review / dataset / paratext 不是文献记录。
+    const usable = (w) => w.type == null || ['article', 'review', 'preprint', 'letter'].includes(String(w.type));
     const head = await api(workUrl(query, 1));
     total = head.meta?.count ?? 0;
-    for (const w of head.results ?? []) keys.add(canonicalDoi(normalizeDoi(w.doi)));
+    for (const w of head.results ?? []) if (usable(w)) keys.add(canonicalDoi(normalizeDoi(w.doi)));
     const pages = Math.min(MAX_PAGES, Math.max(1, Math.ceil(Math.min(total, CAP) / PER_PAGE)));
     for (let page = 2; page <= pages; page++) {
       const data = await api(workUrl(query, page));
-      for (const w of data?.results ?? []) keys.add(canonicalDoi(normalizeDoi(w.doi)));
+      for (const w of data?.results ?? []) if (usable(w)) keys.add(canonicalDoi(normalizeDoi(w.doi)));
       await sleep(200);
     }
   } catch { /* 单条查询失败不该让整本账作废 */ }
@@ -394,14 +396,18 @@ async function main() {
     const kind = source?.stage === 'correction' ? '修正项' : '检索轴';
     console.log(`  ${kind} ${key} 救回 ${group.length} 篇：${group.map((r) => r.doi).join('、')}`);
     if (source?.why) console.log(`     它的理由：${source.why}`);
-    if (group.length >= 2) promotable.push({ id: key, kind, count: group.length, dois: group.map((r) => r.doi) });
+    // 只有「修正项」才谈得上升格。检索轴本来就是设计的一部分，
+    // 它救回两篇是它该做的事，不是一条待升格的修正——建议升格它只会让人困惑。
+    if (source?.stage === 'correction' && group.length >= 2) {
+      promotable.push({ id: key, kind, count: group.length, dois: group.map((r) => r.doi) });
+    }
   }
 
   // ── 升格建议（带防过拟合闸门） ────────────────────────────────────────────
   console.log('\n升格建议');
   console.log('─'.repeat(78));
   if (!promotable.length) {
-    console.log('  没有。每条归因都只涉及 1 篇——按规矩，单篇不升格。');
+    console.log('  没有。修正项每条都只涉及 1 篇——按规矩，单篇不升格。');
     console.log('  单篇就改判据，是在奖励噪音；这条规矩写在代码里，不靠自觉。');
   } else {
     for (const item of promotable) {
