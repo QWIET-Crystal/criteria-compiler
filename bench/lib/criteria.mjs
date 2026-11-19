@@ -57,6 +57,30 @@ function spansOf(sentence, term, offset) {
 }
 
 /**
+ * 否定语境。
+ *
+ * 有些词是**双向**的：`sacrificial` 在「without sacrificial agent」里是好事
+ * （无牺牲剂），在「sacrificial-agent-triggered」里是坏事（靠牺牲剂）。
+ * 实测池子里 33 篇提到它，24 篇是否定形式、9 篇是肯定形式——所以它的
+ * 区分度被自己抵消掉了（lift 1.21）。纯字符串匹配分不清这个。
+ *
+ * 这条只做一件事：看命中位置**前面 40 个字符**（外加紧邻的后缀 -free）有没有否定词。
+ * 和课题组 Python 侧 R5/R14 的做法一致（那边用 40 字符窗口）。
+ */
+const NEGATION = /(?:\b(?:without|free\s+of|non[\s-]?|no|not|absent|avoid(?:s|ed|ing)?|eliminat(?:e|es|ed|ing)|exempt)\b|无|不含|不添加|不需要|不用)/i;
+
+function isNegated(sentenceText, span, sentenceOffset) {
+  const local = span.start - sentenceOffset;
+  if (local < 0 || local > sentenceText.length) return false;
+  const before = sentenceText.slice(Math.max(0, local - 40), local);
+  if (NEGATION.test(before)) return true;
+  // 后缀形式：sacrificial-free / metal-free
+  const after = sentenceText.slice(local + (span.end - span.start), local + (span.end - span.start) + 8);
+  if (/^-?\s*free\b/i.test(after)) return true;
+  return false;
+}
+
+/**
  * 求一组判据。返回每一项的命中与否 + 证据片段。
  * criteria: [{ id, kind, terms: string[], note?, scope?: 'any'|'title' }]
  */
@@ -102,11 +126,57 @@ export function evaluate(criteria, text, parts = {}) {
       return { id, kind, matched: false, evidence: [], note, reason: '判据没有词，视为未命中' };
     }
 
+    // note：只给证据，不改变判定。
+    //
+    // 有些说法是「需要人看一眼」的信号，不是「必须排除」的规则。
+    // 实测踩过：把「出现 sacrificial」写成排除项，直接把金集阳性
+    // 10.1021/jacs.6c00731 判成了不算——它的摘要明写
+    // "using benzyl alcohol as a sacrificial agent"，但它同时产出了苯甲醛，
+    // 按课题组标准仍然算耦合。
+    //
+    // 所以这类词的正确处理是：摆出来，让人判。
+    if (kind === 'note') {
+      const plain = [];
+      const negated = [];
+      for (const sentence of scoped) {
+        for (const term of terms) {
+          for (const span of spansOf(sentence.text, term, sentence.offset)) {
+            if (criterion.negationAware && isNegated(sentence.text, span, sentence.offset)) negated.push(span);
+            else plain.push(span);
+          }
+        }
+      }
+      const parts = [];
+      if (plain.length) parts.push(`以肯定形式出现 ${plain.length} 处（需人工判断）`);
+      if (negated.length) parts.push(`以否定形式出现 ${negated.length} 处（正面信号）`);
+      return {
+        id, kind, matched: true, informational: true,
+        evidence: [...negated, ...plain].slice(0, 4),
+        note,
+        reason: parts.length ? parts.join('；') : '没有出现',
+      };
+    }
+
     if (kind === 'absent') {
-      const found = [];
-      for (const sentence of scoped) for (const term of terms) found.push(...spansOf(sentence.text, term, sentence.offset));
-      if (found.length) {
-        return { id, kind, matched: false, evidence: found.slice(0, 3), note, reason: `出现了 ${found.length} 处不该出现的说法` };
+      const violations = [];
+      const negatedHits = [];
+      for (const sentence of scoped) {
+        for (const term of terms) {
+          for (const span of spansOf(sentence.text, term, sentence.offset)) {
+            // negationAware：命中处若处于否定语境，就不算违规，反而是正面信号。
+            if (criterion.negationAware && isNegated(sentence.text, span, sentence.offset)) negatedHits.push(span);
+            else violations.push(span);
+          }
+        }
+      }
+      if (violations.length) {
+        return { id, kind, matched: false, evidence: violations.slice(0, 3), note, reason: `出现了 ${violations.length} 处不该出现的说法` };
+      }
+      if (negatedHits.length) {
+        return {
+          id, kind, matched: true, evidence: negatedHits.slice(0, 3), note,
+          reason: `以否定形式出现 ${negatedHits.length} 处——没有用它，是正面信号`,
+        };
       }
       return { id, kind, matched: true, evidence: [], note, reason: '一条都没有出现' };
     }
@@ -180,11 +250,21 @@ export function evaluate(criteria, text, parts = {}) {
  *
  * 二值会替人做一个它没资格做的决定，所以这里必须是三档。
  */
+/**
+ * 一条判据算不算「正向证据」。
+ *
+ * absent 是排除项、note 是提示项——两者都不构成「这篇论文像不像」的证据。
+ * 这个判断散在四个脚本里各写一遍，就是上次「判定规则写了 5 份」那类事故的前身，
+ * 所以收在这里一处。
+ */
+export const isPositiveResult = (r) => r.kind !== 'absent' && r.kind !== 'note' && r.matched;
+
 export function decide(criteria, text, parts = {}) {
   const results = evaluate(criteria, text, parts);
   const violated = results.find((r) => r.kind === 'absent' && !r.matched);
   const coOccur = results.filter((r) => r.kind === 'co-occur');
-  const positive = results.filter((r) => r.kind !== 'absent' && r.matched);
+  // note 不进任何一侧：它只提供证据。
+  const positive = results.filter(isPositiveResult);
 
   const strong = coOccur.some((r) => r.matched);
   const weak = positive.length > 0;

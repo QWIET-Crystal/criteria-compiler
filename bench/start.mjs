@@ -44,6 +44,30 @@ const CAP = Math.max(50, Math.min(1000, Number(argValue('--cap', '200')) || 200)
 const PICK = Math.max(10, Math.min(100, Number(argValue('--pick', '50')) || 50));
 
 // 时间窗口：起草阶段就能给。没有就在 provenance 里明说「日期只能事后筛」。
+// 词的分工：检索层要宽，判定层要窄。
+//
+// 有些词适合拼查询、不适合当证据（「photosynthesis」在正例和池子里一样常见）。
+// 有些词方向相反（「sacrificial」在 without sacrificial agent 里是好事，
+// 在 sacrificial-agent-triggered 里是坏事）——它该做极性判据，不该进词表。
+//
+// 声明在 pack.json 的 noiseTerms / polarityTerms 里；CLI 可以覆盖：
+//   --noise "photosynthesis,production rate"  --polarity "sacrificial"
+const PACK_DECL = (() => {
+  const file = path.join(ROOT, 'packs', ID, 'pack.json');
+  if (!fs.existsSync(file)) return {};
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return {}; }
+})();
+
+const splitList = (value) => String(value ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+
+const NOISE = splitList(argValue('--noise', '')).length
+  ? splitList(argValue('--noise', ''))
+  : (PACK_DECL.noiseTerms ?? []).map((t) => t.term);
+
+const POLARITY = splitList(argValue('--polarity', '')).length
+  ? splitList(argValue('--polarity', ''))
+  : (PACK_DECL.polarityTerms ?? []).map((t) => t.term);
+
 const DATE_WINDOW = (() => {
   const since = argValue('--since', '');
   const until = argValue('--until', '');
@@ -261,7 +285,13 @@ async function main() {
     console.error('可以先设 OPENALEX_API_KEY 再跑。现在继续会得到一份基于空背景池的草案——那没有意义。');
     process.exit(2);
   }
-  const terms = refineAgainstPool(candidates, poolWorks);
+  const allTerms = refineAgainstPool(candidates, poolWorks);
+  // 噪音词只从判定层剔除；它们仍然留在 candidates 里参与拼查询（检索层要宽）。
+  // 噪音词（不区分）和极性词（方向相反）都不该留在词表里：
+  // 前者当证据只会放大误报，后者会被自己的两个方向抵消。
+  const noiseSet = new Set([...NOISE, ...POLARITY].map((t) => t.toLowerCase()));
+  const terms = allTerms.filter((t) => !noiseSet.has(t.term.toLowerCase()));
+  const noiseDropped = allTerms.filter((t) => noiseSet.has(t.term.toLowerCase()));
   if (!terms.length) fail('所有候选词都在背景池里高频出现，没有一个是区分性的。多半是正例太杂，或者这个领域的说法确实没有共识词。');
 
   const dropped = candidates.filter((c) => !terms.some((t) => t.term === c.term));
@@ -275,19 +305,30 @@ async function main() {
   // ── 共现判据：这是「数词频」补不上的那一块 ────────────────────────────────
   // 一个 (A, B) 要成为判据：在 ≥2 篇正例的同一句里一起出现，且在任何反例的同一句里
   // 都没一起出现过。只查「反例里有没有 B」不够——要查「有没有一起出现」。
-  // 共现只用「够稀有」的词来配。
-  // 用全量词表的话，第一条永远是 charge + electron —— 这两个词在正例里 100% 出现，
-  // 却不是判据，是这个领域的常识；它们的共现对任何论文都成立，等于没判据。
-  const specificTerms = terms.filter((t) => t.df <= 0.05).map((t) => t.term);
-  const termList = (specificTerms.length >= 3 ? specificTerms : terms.map((t) => t.term));
-  const posWithTerms = posWorks.map((work) => ({ ...work, _terms: termList }));
-  const negWithTerms = negWorks.map((work) => ({ ...work, _terms: termList }));
-  const coPairs = termList.length
+  // 共现对用**全量词表**来配（含噪音词），只是不用它们单独当证据。
+  //
+  // 这是一条实测踩出来的分工：
+  //   · photosynthesis 单独出现时不区分任何东西（lift 0.93）→ 不能进 core-any
+  //   · 但它和 aerobic 撞在同一句里，就能把 jacs.6c00731 那一篇认出来
+  //   · 删掉它之后，那篇直接掉成「漏」——因为共现对也跟着没了
+  //
+  // 也就是说，**「必须与其他词一起出现」不是另一种删法，它是另一个判据形式**。
+  // 判据层（core-any）要窄，配对层（co-occur）要宽，这两层不能共用一个词表。
+  // 两份清单，不能合并：
+  //   judgeTerms —— core-any 用。只放「单独出现也算数」的词（已剔除噪音/极性词）。
+  //   pairTerms  —— 共现配对用。放全量稀有词，包括那些「单独不算数、但撞在一起就有意义」的。
+  // 一开始我图省事共用一份，结果删掉的噪音词又从另一条路径回来了。
+  const judgeTerms = terms.map((t) => t.term);
+  const pairSource = allTerms.filter((t) => t.df <= 0.05).map((t) => t.term);
+  const pairTerms = pairSource.length >= 3 ? pairSource : judgeTerms;
+  const posWithTerms = posWorks.map((work) => ({ ...work, _terms: pairTerms }));
+  const negWithTerms = negWorks.map((work) => ({ ...work, _terms: pairTerms }));
+  const coPairs = pairTerms.length
     ? findCooccurrences(posWithTerms, negWithTerms, { minPos: Math.min(2, posWorks.length), limit: 6 })
     : [];
 
   const criteria = [
-    { id: 'core-any', kind: 'any', terms: termList.slice(0, 8), note: '区分词，任一说法的出现就算接触到了主题' },
+    { id: 'core-any', kind: 'any', terms: judgeTerms.slice(0, 8), note: '区分词，任一说法的出现就算接触到了主题' },
     ...coPairs.map((pair, i) => ({
       id: `co-${i + 1}`,
       kind: 'co-occur',
@@ -298,6 +339,21 @@ async function main() {
     ...(negMarkers.length
       ? [{ id: 'exclusion', kind: 'absent', terms: negMarkers.slice(0, 4).map((t) => t.term), note: '只出现在你反例里的说法，出现就意味着「这样可能不算」' }]
       : []),
+    // 极性提示：只给证据，不改判定。
+    //
+    // 一开始写成排除项，实测立刻把金集阳性 10.1021/jacs.6c00731 判成了不算——
+    // 它确实写了 "using benzyl alcohol as a sacrificial agent"，但它同时产出了苯甲醛，
+    // 按课题组标准仍然算耦合。**用没用牺牲剂，不是判「不算」的依据。**
+    // 正确做法是把它摆出来让人看：肯定形式是「要留意」，否定形式是「正面信号」。
+    ...(POLARITY.length
+      ? [{
+          id: 'polarity',
+          kind: 'note',
+          negationAware: true,
+          terms: POLARITY,
+          note: '双向词：否定形式（without / -free）是正面信号，肯定形式需要人看一眼它有没有同时产出有价值的东西。它不参与判定。',
+        }]
+      : []),
   ];
 
   // ── 草案 ────────────────────────────────────────────────────────────────
@@ -305,6 +361,14 @@ async function main() {
     pack: ID,
     want: WANT,
     examples: { positive: POS, negative: NEG },
+    // 检索层与判定层分开存：
+    //   searchTerms 拼查询用（宽，含被判定层剔除的噪音词）
+    //   mustHave    判定用（窄）
+    // 混成一份的后果实测过：refine 重拉时用了判定词，池子会莫名其妙变窄。
+    // 检索词 = 过了背景过滤、但**没有**剔噪音的那一份（宽）。
+    // 不能直接用 candidates：那是按出现次数排的前 8 个，全是 photocatalysts / synthesis
+    // 这种通用词，拿去拼查询等于把整个领域捞回来。
+    searchTerms: allTerms.slice(0, 8).map((t) => t.term),
     mustHave: terms.map((t) => ({ term: t.term, inPositives: t.count, poolFrequency: Number(t.df.toFixed(3)) })),
     mustNot: negMarkers.map((t) => t.term),
     criteria,
@@ -332,6 +396,18 @@ async function main() {
   }
   if (dropped.length) {
     draft.openQuestions.push(`${dropped.length} 个候选词在背景池里太常见、已自动丢弃（例如 ${dropped.slice(0, 3).map((d) => d.term).join('、')}）。如果有你眼里的关键术语被丢了，说明它喊得不够响——那本身就是个信息。`);
+  }
+  if (noiseDropped.length) {
+    draft.openQuestions.push(
+      `${noiseDropped.length} 个词按声明被排除在判定之外：${noiseDropped.map((d) => d.term).join('、')}。` +
+        '它们在正例和同领域背景里一样常见（lift≈1），当证据只会放大误报；它们仍参与拼查询。',
+    );
+  }
+  if (POLARITY.length) {
+    draft.openQuestions.push(
+      `极性词 ${POLARITY.join('、')} 已做成「只提示」判据：它不参与判定，只把「有没有用牺牲剂」摆给你看。` +
+        '要不要因此判不算，取决于它有没有同时产出有价值的东西——这个判断机器做不了。',
+    );
   }
   draft.openQuestions.push('槽位怎么切，脚本不替你决定。下面这几篇边界论文标完，再回来定。');
 

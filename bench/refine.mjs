@@ -19,7 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { candidateTerms, escapeRe, refineAgainstPool, termsOf } from './lib/terms.mjs';
-import { decide as decideRule, evaluate, workText } from './lib/criteria.mjs';
+import { decide as decideRule, evaluate, isPositiveResult, workText } from './lib/criteria.mjs';
 import { appendHistory, describeDiff, diffSnapshot, isEmptyDiff, lastSnapshot, snapshotOf } from './lib/history.mjs';
 import { make, record as recordProvenance, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
 
@@ -413,7 +413,13 @@ async function main() {
   for (const doi of draft.examples?.negative ?? []) seen.add(normalizeDoi(doi));
 
   console.log(`\n正在按新判据拉下一批（已看过 ${seen.size} 篇会跳过）……`);
-  const pooled = allTerms.length ? await fetchPool(allTerms.slice(0, 8), CAP) : { works: [], failedPages: 0 };
+  // 重拉用**检索词**，不是判定词。
+  // 判定词是窄的（剔过噪音），拿它去拼查询会让池子莫名其妙地变小——
+  // 而那正是「找不到」被误读成「不存在」的经典成因。
+  const searchTerms = Array.isArray(next.searchTerms) && next.searchTerms.length
+    ? next.searchTerms
+    : allTerms.slice(0, 8);
+  const pooled = searchTerms.length ? await fetchPool(searchTerms, CAP) : { works: [], failedPages: 0 };
   const pool = pooled.works;
   if (!pool.length && pooled.failedPages) {
     console.error(`\n拉下一批失败（${pooled.failedPages} 页都取不到）。`);
@@ -433,7 +439,7 @@ async function main() {
   // 工具拿不准，人一眼就能定。旧逻辑会让队列显得「很干净」，代价是绕过全部边界样本。
   const scoreByCriteria = (text, parts = {}) => {
     const decided = decideRule(next.criteria ?? [], text, parts);
-    const hits = decided.results.filter((r) => r.kind !== 'absent' && r.matched).length;
+    const hits = decided.results.filter(isPositiveResult).length;
 
     let score = 0;
     let why = '与当前判据无关';
@@ -472,7 +478,7 @@ async function main() {
     const violated = results.some((r) => r.kind === 'absent' && !r.matched);
     if (violated) return false;
     const coOccur = results.filter((r) => r.kind === 'co-occur');
-    return coOccur.length ? coOccur.some((r) => r.matched) : results.some((r) => r.kind !== 'absent' && r.matched);
+    return coOccur.length ? coOccur.some((r) => r.matched) : results.some(isPositiveResult);
   }).map((row) => ({ ...row, why: `${row.why}（上一轮遗留，新判据下仍命中）`, score: 2 }));
 
   const merged = [...reranked, ...carried]

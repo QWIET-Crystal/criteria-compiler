@@ -16,7 +16,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { decide as decideRule, workText } from './lib/criteria.mjs';
+import { decide as decideRule, isPositiveResult, workText } from './lib/criteria.mjs';
 import { loadWorks, normalizeDoi as normDoi, worksFromCsv } from './lib/io.mjs';
 import { CAUSES, readCauses, summariseCauses, writeCause } from './lib/causes.mjs';
 import { make, record, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
@@ -179,6 +179,8 @@ async function criteriaCheck(criteriaPath, pack, positives) {
     // 判定只用 lib 里那一份，不在这里重写。
     const decided = decideRule(criteria, text, { title: work.title, abstract: work.abstract });
     const { violated, strong, weak } = decided;
+    // decide() 里的 violated 是布尔值；要拿证据得回去找那条判据本身。
+    const violatedCriterion = decided.results.find((r) => r.kind === 'absent' && !r.matched) ?? null;
     const said = !violated && (strong || weak);
 
     return {
@@ -187,8 +189,10 @@ async function criteriaCheck(criteriaPath, pack, positives) {
       status: !violated && strong ? 'recognized' : !violated && weak ? 'weak' : 'missed',
       cause: causes[doi] ?? null,
       violated: Boolean(violated),
-      evidence: decided.results.filter((r) => r.kind !== 'absent' && r.matched).flatMap((r) => r.evidence.slice(0, 1)),
-      reason: violated ? `踩到排除信号「${violated.evidence[0]?.quote ?? '?'}」` : strong ? '共现判据命中' : weak ? '只有泛词命中，没有共现证据' : '没有任何正向判据命中',
+      evidence: decided.results.filter(isPositiveResult).flatMap((r) => r.evidence.slice(0, 1)),
+      reason: violated
+        ? `踩到排除信号「${violatedCriterion?.evidence?.[0]?.quote ?? '?'}」（${violatedCriterion?.id ?? '?'}）`
+        : strong ? '共现判据命中' : weak ? '只有泛词命中，没有共现证据' : '没有任何正向判据命中',
     };
   });
 
@@ -458,4 +462,8 @@ async function main() {
   console.log(`  账本：${path.relative(ROOT, out)}`);
 }
 
-main().catch((error) => { console.error(error.message); process.exit(1); });
+main().catch((error) => {
+  // 只打印 message 的话，运行时错误（不是我们主动 fail 的那种）完全没法定位。
+  console.error(error.stack ? error.stack : error.message);
+  process.exit(1);
+});

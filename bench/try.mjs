@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { decide as decideRule, workText } from './lib/criteria.mjs';
+import { decide as decideRule, isPositiveResult, workText } from './lib/criteria.mjs';
 import { labelOf, loadWorks, normalizeDoi, readDraft, readQueue, ROOT, worksFromCsv } from './lib/io.mjs';
 import { describeDiff } from './lib/history.mjs';
 
@@ -184,7 +184,7 @@ async function main() {
     for (const row of rows) {
       const decided = decide(textOf(row.doi), partsOf(row.doi));
       const fired = decided.results
-        .filter((r) => r.kind !== 'absent' && r.matched)
+        .filter(isPositiveResult)
         .map((r) => r.id)
         .sort();
       if (!fired.length) continue;

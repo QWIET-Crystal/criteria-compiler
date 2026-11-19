@@ -169,5 +169,69 @@ const TEXT = [
   check('生成出来的判据，求值器全都认得出', pairs2.length > 0 && alive, JSON.stringify(pairs2));
 }
 
+// ── 否定语境：同一个词，两种方向 ────────────────────────────────────────────
+{
+  const plain = [{ id: 'x', kind: 'absent', terms: ['sacrificial'] }];
+  const aware = [{ id: 'x', kind: 'absent', terms: ['sacrificial'], negationAware: true }];
+
+  const BAD = 'A sacrificial-agent-triggered system produced hydrogen peroxide.';
+  const GOOD = 'Hydrogen peroxide was produced without any sacrificial agent.';
+
+  check('纯字符串：坏例子判违规', evaluate(plain, BAD)[0].matched === false);
+
+  const goodPlain = evaluate(plain, GOOD)[0];
+  check('纯字符串：好例子被误判为违规（这就是要修的问题）', goodPlain.matched === false, goodPlain.reason);
+
+  const goodAware = evaluate(aware, GOOD)[0];
+  check('否定感知：好例子不判违规', goodAware.matched === true, goodAware.reason);
+  check('否定感知：把否定形式当正面证据返回', goodAware.evidence.length > 0, JSON.stringify(goodAware.evidence));
+
+  const badAware = evaluate(aware, BAD)[0];
+  check('否定感知：坏例子仍然判违规', badAware.matched === false, badAware.reason);
+}
+
+// ── 后缀形式：sacrificial-free ──────────────────────────────────────────────
+{
+  const aware = [{ id: 'x', kind: 'absent', terms: ['sacrificial'], negationAware: true }];
+  const r = evaluate(aware, 'A sacrificial-free route to hydrogen peroxide.')[0];
+  check('否定感知：sacrificial-free 也算否定', r.matched === true, r.reason);
+}
+
+// ── 中文否定 ────────────────────────────────────────────────────────────────
+{
+  const aware = [{ id: 'x', kind: 'absent', terms: ['sacrificial'], negationAware: true }];
+  const r = evaluate(aware, '该体系无需 sacrificial 即可产过氧化氢。')[0];
+  check('否定感知：中文「无需」也算否定', r.matched === true, r.reason);
+}
+
+// ── 没开 negationAware 时行为不变 ───────────────────────────────────────────
+{
+  const r = evaluate([{ id: 'x', kind: 'absent', terms: ['zzz'] }], 'nothing here')[0];
+  check('默认 absent 行为不受影响', r.matched === true);
+}
+
+// ── note：只给证据，不改判定 ────────────────────────────────────────────────
+{
+  const text = 'The reaction used benzyl alcohol as a sacrificial agent and gave benzaldehyde.';
+  const withNote = [
+    { id: 'any1', kind: 'any', terms: ['benzaldehyde'] },
+    { id: 'hint', kind: 'note', terms: ['sacrificial'], negationAware: true },
+  ];
+  const decided = decide(withNote, text, { title: 't', abstract: text });
+  check('note：不把结果判成不算', decided.verdict !== '不算', decided.verdict);
+  check('note：不算作正向证据', decided.positive.every((r) => r.kind !== 'note'));
+
+  const noteResult = decided.results.find((r) => r.kind === 'note');
+  check('note：仍然给出证据', noteResult.matched === true && noteResult.evidence.length > 0);
+  check('note：说明是肯定形式', /肯定形式/.test(noteResult.reason), noteResult.reason);
+}
+
+// ── note + 否定：反过来是正面信号 ────────────────────────────────────────────
+{
+  const text = 'Hydrogen peroxide was produced without any sacrificial agent.';
+  const [r] = evaluate([{ id: 'hint', kind: 'note', terms: ['sacrificial'], negationAware: true }], text, { title: 't', abstract: text });
+  check('note：否定形式被认出来', /否定形式/.test(r.reason), r.reason);
+}
+
 console.log(`\n${passed} 通过 / ${failed} 失败`);
 process.exit(failed ? 1 : 0);

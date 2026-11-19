@@ -150,5 +150,23 @@
   "pluralExempt": [
     "hydrogen peroxide",
     "H2O2"
+  ],
+  "noiseTerms": [
+    {
+      "term": "photosynthesis",
+      "lift": 0.93,
+      "why": "中性样本里它在池子(36%)比在阳性(33%)还常见；它是这个领域的常识，不是判据"
+    },
+    {
+      "term": "production rate",
+      "lift": 0.98,
+      "why": "通用的指标说法，出现在几乎所有产率论文里"
+    }
+  ],
+  "polarityTerms": [
+    {
+      "term": "sacrificial",
+      "why": "双向词：without sacrificial agent 是好事，sacrificial-agent-triggered 是坏事。实测池子里 33 篇提到它，24 篇否定形式、9 篇肯定形式，lift 因此被抵消到 1.21"
+    }
   ]
 }
