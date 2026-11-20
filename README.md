@@ -183,6 +183,29 @@ node bench/provenance.mjs --pack cof-h2o2
 
 > 一位使用者说，这句话比他拿到的三个工具加起来有用——他就是在这一句上栽的，而且是他先栽的。
 
+## 分型：算进来的论文该进哪一章
+
+判据说「算」之后，人还要知道它放哪一节。四型来自 `references/rules.md`：
+A 载流子耦合 / B H₂O₂ 介导 / C H₂O₂→ROS / D 附加级联。
+
+```bash
+node bench/type.mjs --pack cof-h2o2 --works <题录快照>
+```
+
+```
+10.1002/anie.7073224
+  建议：D 附加/级联   ✗ 建议 D，标注是 A
+  置信：high   只有 D 型的信号
+  [D] 伴随有机转化，允许非同体系
+      · "Tandem Photocatalytic H2O2 Production and In Situ Upgrading Enabled by…"
+```
+
+它**不写回 gold.csv**：分型决定章节骨架，得由人定。工具只负责把
+「哪一型的信号出现在哪一句」摆出来。
+
+两个必须堵的误报（都踩过）：材料名里的 `OH` 不是羟基自由基；
+`furthermore / moreover` 不是级联。细节见 `docs/typing.md`。
+
 ## 耦合短语：论文自己说它耦合了
 
 判据不只能从统计里长。包里可以声明 `couplingPhrases`，它们会和对象词组成**共现**判据（同句出现才算）：

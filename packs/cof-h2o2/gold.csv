@@ -1,6 +1,6 @@
 doi,label,coupling_type,material_scope,has_abstract,note
 10.1002/adfm.202510257,2,A,COF,yes,BT-COF; two-phase system; both products in one figure
-10.1021/jacs.6c00731,2,A,COF,yes,sp2-COF-CN; coupled run is 24 mM, headline 17768 belongs to the sacrificial run
+10.1021/jacs.6c00731,2,A,COF,yes,sp2-COF-CN; coupled run is 24 mM, headline 17768 belongs to the sacrificial run（型为 A 来自全文 coupled run，摘要无同时性词）
 10.1002/adfm.202316773,1,A,CMP,yes,不纳入（2026-11-19 收紧为只算 COF 骨架）：CMP 姊妹体系
 10.1016/j.apcatb.2024.124896,1,A,hybrid,yes,不纳入：KNPHI 姊妹体系，非 COF 骨架
 10.1002/adfm.202510323,1,A,hybrid,yes,不纳入：Bi2O2S/CuInS2，不含 COF
@@ -9,8 +9,8 @@ doi,label,coupling_type,material_scope,has_abstract,note
 10.1016/j.apcatb.2026.127309,0,-,hybrid,yes,electrocatalytic series operation; not photocatalytic; negative control
 10.1016/j.mser.2025.101117,0,-,COF,no,bifunctional not coupled; benzylamine run starts with "In addition"; abstract missing in OpenAlex
 10.1002/anie.202423368,2,A,COF,yes,外部金集（Downloads/光催化耦合）：Singlet‐Oxygen‐Driven Cooperative Photocatalytic Coupling of
-10.1038/s41467-026-71137-0,2,A,COF,yes,外部金集（Downloads/光催化耦合）：Defective three-dimensional covalent organic frameworks for 
-10.1002/anie.7073224,2,A,COF,yes,外部金集（Downloads/光催化耦合）：Tandem Photocatalytic H 2 O 2 Production and In Situ Upgradi
+10.1038/s41467-026-71137-0,2,?,COF,yes,外部金集（Downloads/光催化耦合）：Defective three-dimensional covalent organic frameworks for （摘要里没有分型依据，需看正文定 A/D）
+10.1002/anie.7073224,2,D,COF,yes,外部金集（Downloads/光催化耦合）：Tandem Photocatalytic H 2 O 2 Production and In Situ Upgradi（型由 tandem 证据定为 D，2026-11-20 分型器纠正）
 10.1002/anie.9931408,2,A,COF,yes,外部金集（Downloads/光催化耦合）：Dual Metal‐Bridged 2D COF for High Performance of H 2 O 2 Ph
-10.1016/j.apcatb.2025.126337,2,A,COF,no,外部金集（Downloads/光催化耦合）：Harnessing proton-oxygen-electron coupling over dual-site co
+10.1016/j.apcatb.2025.126337,2,?,COF,no,外部金集（Downloads/光催化耦合）：Harnessing proton-oxygen-electron coupling over dual-site co（无摘要，分不了型）
 10.1002/anie.2408330,2,A,COF,yes,外部金集（Downloads/光催化耦合）：Solvent‐Driven Modulation of Covalent‐Organic Framework Nano

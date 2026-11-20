@@ -16,7 +16,7 @@
     "bench:json": "node bench/run.mjs --json",
     "validate": "node bench/validate-pack.mjs",
     "build": "tsc -b packages/core packages/cli packages/mcp",
-    "test": "node bench/validate-pack.mjs && node bench/lib/criteria.selftest.mjs && node bench/lib/history.selftest.mjs && node bench/lib/causes.selftest.mjs && node bench/lib/provenance.selftest.mjs && node bench/lib/io.selftest.mjs && vitest run",
+    "test": "node bench/validate-pack.mjs && node bench/lib/criteria.selftest.mjs && node bench/lib/history.selftest.mjs && node bench/lib/causes.selftest.mjs && node bench/lib/provenance.selftest.mjs && node bench/lib/io.selftest.mjs && node bench/lib/types.selftest.mjs && vitest run",
     "typecheck": "tsc -b packages/core && pnpm -r typecheck",
     "refine": "node bench/refine.mjs",
     "ledger": "node bench/ledger.mjs",
@@ -25,7 +25,8 @@
     "provenance": "node bench/provenance.mjs",
     "probe": "node bench/run.mjs --probe",
     "audit": "node bench/term-audit.mjs",
-    "audit:note": "node bench/note-audit.mjs"
+    "audit:note": "node bench/note-audit.mjs",
+    "type": "node bench/type.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

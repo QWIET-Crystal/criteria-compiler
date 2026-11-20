@@ -16,7 +16,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { decide as decideRule, isPositiveResult, workText } from './lib/criteria.mjs';
+import { decide as decideRule, isPositiveResult, splitSentences, workText } from './lib/criteria.mjs';
+import { TYPES, detectType } from './lib/types.mjs';
 import { loadWorks, normalizeDoi as normDoi, worksFromCsv } from './lib/io.mjs';
 import { CAUSES, readCauses, summariseCauses, writeCause } from './lib/causes.mjs';
 import { make, record, STANDARD_NOT_INCLUDED } from './lib/provenance.mjs';
@@ -194,6 +195,14 @@ async function criteriaCheck(criteriaPath, pack, positives) {
       cause: causes[doi] ?? null,
       violated: Boolean(violated),
       evidence: d.results.filter(isPositiveResult).flatMap((r) => r.evidence.slice(0, 1)),
+      ...(() => {
+        const typed = detectType(splitSentences(text));
+        return {
+          type: typed.type,
+          typeTried: true,
+          typeEvidence: typed.type ? (typed.evidence[typed.type]?.[0] ?? '') : '',
+        };
+      })(),
       // 理由要和判定依据对得上。原来只认「共现命中」，于是按必要条件判「算」的论文
       // 会显示成「只有泛词命中」——结论对、理由错，比两个都错更难发现。
       reason: violated
@@ -228,6 +237,14 @@ async function criteriaCheck(criteriaPath, pack, positives) {
       // 和按共现认出的，是两件不同强度的事，人得能分辨。
       console.log(`      依据：${row.reason}`);
       if (quotes) console.log(`      证据：${quotes}`);
+      // 分型建议：认出来只是第一步，人还得知道它进哪一章。
+      // 拿不准就直说「摘要里没有分型依据」——章节骨架定错，整篇结构就歪。
+      if (row.type) {
+        const t = TYPES[row.type];
+        console.log(`      可归入：${row.type} ${t.name}（${t.short}）${row.typeEvidence ? `——「${row.typeEvidence.slice(0, 80)}」` : ''}`);
+      } else if (row.typeTried) {
+        console.log('      可归入：未定（摘要里没有分型依据，需看正文）');
+      }
     } else {
       console.log(`      ${row.reason}`);
       if (row.cause) console.log(`      已定原因：${CAUSES[row.cause.cause]?.label ?? row.cause.cause}${row.cause.note ? `——${row.cause.note}` : ''}`);
